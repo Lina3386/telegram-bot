@@ -25,6 +25,10 @@ func NewFinanceService(db *sql.DB) *FinanceService {
 	}
 }
 
+func (s *FinanceService) CreateUser(ctx context.Context, telegramID int64, username string, authToken string) (*models.User, error) {
+	return s.userRepo.CreateUser(ctx, telegramID, username, authToken)
+}
+
 // Считает общий доход
 func (s *FinanceService) CalculateTotalIncome(ctx context.Context, userID int64) (int64, error) {
 	incomes, err := s.incomeRepo.GetUserIncomes(ctx, userID)
@@ -65,7 +69,7 @@ func (s *FinanceService) CalculateAvailableForSavings(ctx context.Context, userI
 		return 0, err
 	}
 
-	available := totalIncome + totalExpense
+	available := totalIncome - totalExpense
 	if available < 0 {
 		available = 0
 	}

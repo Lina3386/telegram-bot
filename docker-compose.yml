@@ -1,16 +1,10 @@
-version: '3.9'
-
-volumes:
-  postgres_volume:
-    driver: local
-
 services:
   pg:
     image: postgres:15-alpine
 
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-bot_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bot_password}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-04MrOg.26}
       POSTGRES_DB: ${POSTGRES_DB:-finance_bot}
       POSTGRES_INITDB_ARGS: "--encoding=UTF8"
 
@@ -22,7 +16,7 @@ services:
       - ./migrations:/docker-entrypoint-initdb.d
 
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-bot_user} -d ${POSTGRES_DB:-finance_bot}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-finance_bot}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -35,3 +29,7 @@ services:
 networks:
   finance_network:
     driver: bridge
+
+volumes:
+  postgres_volume:
+    driver: local

@@ -1,13 +1,17 @@
 package main
 
 import (
-	"database/sql"
-	"github.com/Lina3386/telegram-bot/internal/config"
-	"github.com/Lina3386/telegram-bot/internal/handlers"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
+
+	"github.com/Lina3386/telegram-bot/internal/client"
+	"github.com/Lina3386/telegram-bot/internal/config"
+	"github.com/Lina3386/telegram-bot/internal/handlers"
+	"github.com/Lina3386/telegram-bot/internal/services"
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	_ "github.com/lib/pq"
 )
 
 func main() {
@@ -18,16 +22,11 @@ func main() {
 		log.Fatal("TELEGRAM_TOKEN not set")
 	}
 
-	db, err := sql.Open("postgres", cfg.DatabaseURL)
+	db, err := config.ConnectDB(cfg.DatabaseURL)
 	if err != nil {
 		log.Fatalf("Failed to connect to DB: %v", err)
 	}
 	defer db.Close()
-
-	err = db.Ping()
-	if err != nil {
-		log.Fatalf("Failed to ping DB: %v", err)
-	}
 	log.Println("Connected to DB")
 
 	bot, err := tgbotapi.NewBotAPI(cfg.TelegramToken)
@@ -49,7 +48,7 @@ func main() {
 	}
 	defer chatClient.Close()
 
-	financeService := service.NewFinanceService(db)
+	financeService := services.NewFinanceService(db)
 	botHandler := handlers.NewBotHandler(bot, authClient, chatClient, financeService)
 
 	u := tgbotapi.NewUpdate(0)

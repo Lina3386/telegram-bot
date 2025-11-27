@@ -1,4 +1,3 @@
--- +goose Up
 CREATE TABLE IF NOT EXISTS users (
     id BIGSERIAL PRIMARY KEY,
     telegram_id BIGINT UNIQUE NOT NULL,
@@ -10,11 +9,3 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 CREATE INDEX IF NOT EXISTS idx_users_telegram_id ON users(telegram_id);
--- +goose StatementBegin
--- +goose StatementEnd
-
--- +goose Down
-DROP INDEX IF EXISTS idx_users CASCADE;
-DROP TABLE IF EXISTS users CASCADE;
--- +goose StatementBegin
--- +goose StatementEnd

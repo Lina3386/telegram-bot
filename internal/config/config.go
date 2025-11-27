@@ -1,8 +1,12 @@
 package config
 
 import (
+	"database/sql"
+	"fmt"
 	"github.com/joho/godotenv"
+	"log"
 	"os"
+	"time"
 )
 
 type Config struct {
@@ -15,6 +19,9 @@ type Config struct {
 
 func LoadConfig() *Config {
 	godotenv.Load()
+
+	dbURL := getEnv("DATABASE_URL", "")
+	log.Printf("DEBUG: DATABASE_URL = %s", dbURL)
 
 	return &Config{
 		TelegramToken:  getEnv("TELEGRAM_TOKEN", ""),
@@ -30,4 +37,39 @@ func getEnv(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func ConnectDB(dbURL string) (*sql.DB, error) {
+	var db *sql.DB
+	var err error
+	maxRetries := 10
+	retryDelay := 2 * time.Second
+
+	for i := 1; i <= maxRetries; i++ {
+		log.Printf("Попытка подключения к БД %d/%d...", i, maxRetries)
+
+		db, err = sql.Open("postgres", dbURL)
+		if err != nil {
+			log.Printf("Ошибка открытия подключения: %v", err)
+			time.Sleep(retryDelay)
+			continue
+		}
+
+		// Проверьте подключение
+		err = db.Ping()
+		if err == nil {
+			log.Println("✅ Connected to DB")
+			return db, nil
+		}
+
+		log.Printf("Ошибка ping БД: %v", err)
+		db.Close()
+
+		if i < maxRetries {
+			log.Printf("Ждём %v перед следующей попыткой...", retryDelay)
+			time.Sleep(retryDelay)
+		}
+	}
+
+	return nil, fmt.Errorf("failed to connect to database after %d attempts: %w", maxRetries, err)
 }

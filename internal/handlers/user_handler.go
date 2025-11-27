@@ -3,7 +3,9 @@ package handlers
 import (
 	"context"
 	"fmt"
+	"github.com/Lina3386/telegram-bot/internal/client"
 	"github.com/Lina3386/telegram-bot/internal/services"
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"log"
 )
 
