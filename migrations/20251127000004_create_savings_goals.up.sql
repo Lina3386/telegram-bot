@@ -1,3 +1,4 @@
+-- +goose Up
 CREATE TABLE IF NOT EXISTS savings_goals (
     id BIGSERIAL PRIMARY KEY,
     user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -13,3 +14,8 @@ CREATE TABLE IF NOT EXISTS savings_goals (
 
 CREATE INDEX IF NOT EXISTS idx_goals_user_id ON savings_goals(user_id);
 CREATE INDEX IF NOT EXISTS idx_goals_status ON savings_goals(status);
+
+-- +goose Down
+DROP INDEX IF EXISTS idx_goals_status;
+DROP INDEX IF EXISTS idx_goals_user_id;
+DROP TABLE IF EXISTS savings_goals CASCADE;

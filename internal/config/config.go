@@ -3,10 +3,11 @@ package config
 import (
 	"database/sql"
 	"fmt"
-	"github.com/joho/godotenv"
 	"log"
 	"os"
 	"time"
+
+	"github.com/joho/godotenv"
 )
 
 type Config struct {
@@ -18,17 +19,36 @@ type Config struct {
 }
 
 func LoadConfig() *Config {
-	godotenv.Load()
+	// Загружаем .env файл
+	if err := godotenv.Load(); err != nil {
+		log.Println("⚠️  No .env file found")
+	}
 
-	dbURL := getEnv("DATABASE_URL", "")
-	log.Printf("DEBUG: DATABASE_URL = %s", dbURL)
+	// Явно читаем каждую переменную
+	dbUser := os.Getenv("DB_USER")
+	dbPassword := os.Getenv("DB_PASSWORD")
+	dbHost := os.Getenv("DB_HOST")
+	dbPort := os.Getenv("DB_PORT")
+	dbName := os.Getenv("DB_NAME")
+	dbSSLMode := os.Getenv("DB_SSLMODE")
+
+	// Проверяем, что все переменные установлены
+	if dbHost == "" {
+		dbHost = "localhost"
+	}
+	if dbSSLMode == "" {
+		dbSSLMode = "disable"
+	}
+
+	dbURL := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s",
+		dbUser, dbPassword, dbHost, dbPort, dbName, dbSSLMode)
 
 	return &Config{
-		TelegramToken:  getEnv("TELEGRAM_TOKEN", ""),
-		DatabaseURL:    getEnv("DATABASE_URL", ""),
-		AuthServiceURL: getEnv("AUTH_SERVICE_URL", "localhost:50051"),
-		ChatServiceURL: getEnv("CHAT_SERVICE_URL", "localhost:50052"),
-		Debug:          getEnv("DEBUG", "false") == "true",
+		TelegramToken:  os.Getenv("TELEGRAM_BOT_TOKEN"),
+		DatabaseURL:    dbURL,
+		AuthServiceURL: os.Getenv("AUTH_SERVER_URL"),
+		ChatServiceURL: os.Getenv("CHAT_SERVER_URL"),
+		Debug:          os.Getenv("LOG_LEVEL") == "debug",
 	}
 }
 
@@ -55,7 +75,7 @@ func ConnectDB(dbURL string) (*sql.DB, error) {
 			continue
 		}
 
-		// Проверьте подключение
+		// ✅ Проверяем подключение
 		err = db.Ping()
 		if err == nil {
 			log.Println("✅ Connected to DB")

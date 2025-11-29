@@ -1,3 +1,4 @@
+-- +goose Up
 CREATE TABLE IF NOT EXISTS incomes (
     id BIGSERIAL PRIMARY KEY,
     user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -10,3 +11,7 @@ CREATE TABLE IF NOT EXISTS incomes (
 );
 
 CREATE INDEX IF NOT EXISTS idx_incomes_user_id ON incomes(user_id);
+
+-- +goose Down
+DROP INDEX IF EXISTS idx_incomes_user_id;
+DROP TABLE IF EXISTS incomes CASCADE;
