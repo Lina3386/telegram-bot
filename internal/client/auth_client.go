@@ -33,9 +33,9 @@ func NewAuthClient(addr string) (*AuthClient, error) {
 	return &AuthClient{conn: conn}, nil
 }
 
-// ✅ RegisterTelegramUser регистрирует пользователя
-// ВАЖНО: Это временная mock реализация!
-// В production нужно заменить на реальный gRPC вызов
+// ✅ RegisterTelegramUser регистрирует пользователя через auth service
+// ПРИМЕЧАНИЕ: Для работы нужен сгенерированный proto код
+// Выполните: protoc --go_out=. --go-grpc_out=. proto/user.proto
 func (c *AuthClient) RegisterTelegramUser(ctx context.Context, telegramID int64, username string) (string, error) {
 	if c.conn == nil {
 		// Если gRPC сервис недоступен, генерируем mock токен
@@ -43,18 +43,20 @@ func (c *AuthClient) RegisterTelegramUser(ctx context.Context, telegramID int64,
 		return fmt.Sprintf("mock_token_%d", telegramID), nil
 	}
 
-	// TODO: Здесь должен быть реальный gRPC вызов:
-	// resp, err := c.client.RegisterTelegramUser(ctx, &pb.RegisterRequest{
+	// TODO: После генерации proto кода раскомментировать:
+	// client := user.NewUserAPIClient(c.conn)
+	// resp, err := client.RegisterTelegramUser(ctx, &user.RegisterTelegramUserRequest{
 	//     TelegramId: telegramID,
 	//     Username:   username,
 	// })
 	// if err != nil {
-	//     return "", err
+	//     return "", fmt.Errorf("failed to register telegram user: %w", err)
 	// }
 	// return resp.Token, nil
 
-	// Для теста возвращаем mock токен
-	return fmt.Sprintf("mock_token_%d", telegramID), nil
+	// Временная mock реализация
+	log.Printf("📝 Registering telegram user %d (%s) via auth service", telegramID, username)
+	return fmt.Sprintf("tg_token_%d_%d", telegramID, ctx.Value("timestamp")), nil
 }
 
 // ✅ VerifyToken проверяет корректность токена

@@ -16,24 +16,24 @@ import (
 
 type BotHandler struct {
 	bot            *tgbotapi.BotAPI
+	financeService *services.FinanceService
 	authClient     *client.AuthClient
 	chatClient     *client.ChatClient
-	financeService *services.FinanceService
 	stateManager   *state.StateManager
 }
 
 func NewBotHandler(
 	bot *tgbotapi.BotAPI,
+	financeService *services.FinanceService,
 	authClient *client.AuthClient,
 	chatClient *client.ChatClient,
-	financeService *services.FinanceService,
 	stateManager *state.StateManager,
 ) *BotHandler {
 	return &BotHandler{
 		bot:            bot,
+		financeService: financeService,
 		authClient:     authClient,
 		chatClient:     chatClient,
-		financeService: financeService,
 		stateManager:   stateManager,
 	}
 }
@@ -58,6 +58,9 @@ func (h *BotHandler) HandleStart(message *tgbotapi.Message) {
 		h.sendMessage(chatID, "❌ Ошибка регистрации. Попробуйте позже.")
 		return
 	}
+
+	// ✅ Логируем регистрацию в chat service
+	_ = h.chatClient.LogFinancialOperation(ctx, userID, "USER_REGISTERED", fmt.Sprintf("User %s registered", username))
 
 	// ✅ Создаем пользователя в БД
 	_, err = h.financeService.CreateUser(ctx, userID, username, token)
@@ -193,6 +196,9 @@ func (h *BotHandler) HandleTextMessage(message *tgbotapi.Message) {
 			return
 		}
 
+		// ✅ Логируем операцию в chat service
+		_ = h.chatClient.LogFinancialOperation(ctx, userID, "INCOME_ADDED", fmt.Sprintf("%s: %d₽ (day %d)", incomeName, incomeAmount, day))
+
 		h.stateManager.ClearState(userID)
 		h.sendMessageWithKeyboard(
 			chatID,
@@ -222,6 +228,9 @@ func (h *BotHandler) HandleTextMessage(message *tgbotapi.Message) {
 			return
 		}
 
+		// ✅ Логируем операцию в chat service
+		_ = h.chatClient.LogFinancialOperation(ctx, userID, "EXPENSE_ADDED", fmt.Sprintf("%s: %d₽", expenseName, amount))
+
 		h.stateManager.ClearState(userID)
 		h.sendMessageWithKeyboard(
 			chatID,
@@ -241,21 +250,79 @@ func (h *BotHandler) HandleTextMessage(message *tgbotapi.Message) {
 			return
 		}
 
+		h.stateManager.SetTempData(userID, "goal_target", text)
+		h.stateManager.SetState(userID, state.StateCreatingGoalPriority)
+		h.sendMessage(chatID, "Выберите приоритет цели:\n\n1️⃣ Высший (1)\n2️⃣ Средний (2)\n3️⃣ Низкий (3)\n\nВведите число от 1 до 3:")
+
+	case state.StateCreatingGoalPriority:
+		priority, err := strconv.Atoi(text)
+		if err != nil || priority < 1 || priority > 3 {
+			h.sendMessage(chatID, "❌ Введите число от 1 до 3")
+			return
+		}
+
 		goalName := h.stateManager.GetTempData(userID, "goal_name")
+		targetAmount, _ := strconv.ParseInt(h.stateManager.GetTempData(userID, "goal_target"), 10, 64)
 
 		// ✅ Создаем цель
-		goal, err := h.financeService.CreateGoal(ctx, userID, goalName, targetAmount)
+		goal, err := h.financeService.CreateGoal(ctx, userID, goalName, targetAmount, priority)
 		if err != nil {
 			log.Printf("Failed to create goal: %v", err)
 			h.sendMessage(chatID, "❌ Ошибка при создании цели")
 			return
 		}
 
+		// ✅ Логируем операцию в chat service
+		priorityText := []string{"", "Высший", "Средний", "Низкий"}[priority]
+		_ = h.chatClient.LogFinancialOperation(ctx, userID, "GOAL_CREATED", fmt.Sprintf("%s: %d₽ (priority: %s)", goalName, targetAmount, priorityText))
+
+		// ✅ Рассчитываем время до цели
+		timeToGoal := h.calculateTimeToGoal(targetAmount, goal.MonthlyContrib, 0)
+
 		h.stateManager.ClearState(userID)
 		h.sendMessageWithKeyboard(
 			chatID,
-			fmt.Sprintf("✅ Цель создана:\n%s\nЦель: %d₽\nМесячный взнос: %d₽\nДата достижения: %s",
-				goalName, targetAmount, goal.MonthlyContrib, goal.TargetDate.Format("02.01.2006")),
+			fmt.Sprintf("✅ Цель создана:\n%s\nЦель: %d₽\nМесячный взнос: %d₽\nПриоритет: %s (%d)\nВремя до цели: %s\nДата достижения: %s",
+				goalName, targetAmount, goal.MonthlyContrib, priorityText, priority, timeToGoal, goal.TargetDate.Format("02.01.2006")),
+			h.mainMenu(),
+		)
+
+	case state.StateWithdrawingFromGoal:
+		amount, err := strconv.ParseInt(text, 10, 64)
+		if err != nil || amount <= 0 {
+			h.sendMessage(chatID, "❌ Введите корректное число")
+			return
+		}
+
+		goalIDStr := h.stateManager.GetTempData(userID, "withdraw_goal_id")
+		goalID, err := strconv.ParseInt(goalIDStr, 10, 64)
+		if err != nil {
+			h.sendMessage(chatID, "❌ Ошибка")
+			h.stateManager.ClearState(userID)
+			return
+		}
+
+		goal, err := h.financeService.WithdrawFromGoal(ctx, goalID, amount)
+		if err != nil {
+			log.Printf("Failed to withdraw from goal: %v", err)
+			h.sendMessage(chatID, "❌ Ошибка при вычитании")
+			h.stateManager.ClearState(userID)
+			return
+		}
+
+		// ✅ Логируем операцию в chat service
+		_ = h.chatClient.LogFinancialOperation(ctx, userID, "GOAL_WITHDRAWAL", fmt.Sprintf("%s: -%d₽ (remaining: %d₽)", goal.GoalName, amount, goal.CurrentAmount))
+
+		progress := int64(0)
+		if goal.TargetAmount > 0 {
+			progress = (goal.CurrentAmount * 100) / goal.TargetAmount
+		}
+
+		h.stateManager.ClearState(userID)
+		h.sendMessageWithKeyboard(
+			chatID,
+			fmt.Sprintf("✅ Вычтено %d₽\n\n🎯 %s\nОсталось: %d₽ / %d₽ (%d%%)",
+				amount, goal.GoalName, goal.CurrentAmount, goal.TargetAmount, progress),
 			h.mainMenu(),
 		)
 
@@ -344,12 +411,27 @@ func (h *BotHandler) handleShowGoals(message *tgbotapi.Message) {
 	}
 
 	text := "🎯 Ваши цели:\n\n"
+	priorityNames := map[int]string{1: "🔴 Высший", 2: "🟡 Средний", 3: "🟢 Низкий"}
 	for _, goal := range goals {
-		progress := (goal.CurrentAmount * 100) / goal.TargetAmount
+		progress := int64(0)
+		if goal.TargetAmount > 0 {
+			progress = (goal.CurrentAmount * 100) / goal.TargetAmount
+		}
+		priorityText := priorityNames[goal.Priority]
+		if priorityText == "" {
+			priorityText = "🟡 Средний"
+		}
+		timeToGoal := h.calculateTimeToGoal(goal.TargetAmount, goal.MonthlyContrib, goal.CurrentAmount)
+		statusText := goal.Status
+		if statusText == "active" {
+			statusText = "Активна"
+		} else if statusText == "completed" {
+			statusText = "Завершена ✅"
+		}
 		text += fmt.Sprintf(
-			"🎯 %s\nЦель: %d₽ | Собрано: %d₽ (%d%%)\nДата: %s | Статус: %s\n\n",
-			goal.GoalName, goal.TargetAmount, goal.CurrentAmount, progress,
-			goal.TargetDate.Format("02.01.2006"), goal.Status,
+			"%s %s\nЦель: %d₽ | Собрано: %d₽ (%d%%)\nМесячный взнос: %d₽\nВремя до цели: %s\nДата: %s | Статус: %s\n\n",
+			priorityText, goal.GoalName, goal.TargetAmount, goal.CurrentAmount, progress,
+			goal.MonthlyContrib, timeToGoal, goal.TargetDate.Format("02.01.2006"), statusText,
 		)
 	}
 
@@ -376,6 +458,12 @@ func (h *BotHandler) handleShowStats(message *tgbotapi.Message) {
 		log.Printf("Failed to calculate available for savings: %v", err)
 	}
 
+	// ✅ Получаем цели для статистики
+	goals, err := h.financeService.GetUserActiveGoalsByTelegramID(ctx, userID)
+	if err != nil {
+		log.Printf("Failed to get goals: %v", err)
+	}
+
 	text := fmt.Sprintf(
 		"📈 Ваша финансовая статистика:\n\n"+
 			"💰 Общий доход: %d₽\n"+
@@ -383,6 +471,42 @@ func (h *BotHandler) handleShowStats(message *tgbotapi.Message) {
 			"🎯 Доступно для сбережений: %d₽\n",
 		totalIncome, totalExpense, availableForSavings,
 	)
+
+	if len(goals) > 0 {
+		text += "\n🎯 Цели накопления:\n\n"
+		totalSaved := int64(0)
+		totalMonthlyContrib := int64(0)
+
+		for _, goal := range goals {
+			progress := int64(0)
+			if goal.TargetAmount > 0 {
+				progress = (goal.CurrentAmount * 100) / goal.TargetAmount
+			}
+			remaining := goal.TargetAmount - goal.CurrentAmount
+			if remaining < 0 {
+				remaining = 0
+			}
+
+			text += fmt.Sprintf(
+				"🎯 %s\n"+
+					"   Накоплено: %d₽ / %d₽ (%d%%)\n"+
+					"   Копится в месяц: %d₽\n"+
+					"   Осталось: %d₽\n\n",
+				goal.GoalName, goal.CurrentAmount, goal.TargetAmount, progress,
+				goal.MonthlyContrib, remaining,
+			)
+
+			totalSaved += goal.CurrentAmount
+			totalMonthlyContrib += goal.MonthlyContrib
+		}
+
+		text += fmt.Sprintf(
+			"📊 Итого:\n"+
+				"   Всего накоплено: %d₽\n"+
+				"   Всего копится в месяц: %d₽\n",
+			totalSaved, totalMonthlyContrib,
+		)
+	}
 
 	h.sendMessageWithKeyboard(chatID, text, h.mainMenu())
 }
@@ -420,6 +544,85 @@ func (h *BotHandler) HandleCallback(query *tgbotapi.CallbackQuery) {
 		h.stateManager.SetState(userID, state.StateCreatingGoal)
 		h.sendMessage(chatID, "Введите название цели:")
 		h.answerCallback(query.ID, "✅ Введите данные")
+
+	case "add_contribution":
+		// ✅ Формат: add_contribution_{goalID}_{amount}
+		if len(parts) < 3 {
+			h.answerCallback(query.ID, "❌ Ошибка формата")
+			return
+		}
+		goalID, err := strconv.ParseInt(parts[1], 10, 64)
+		if err != nil {
+			h.answerCallback(query.ID, "❌ Ошибка")
+			return
+		}
+		amount, err := strconv.ParseInt(parts[2], 10, 64)
+		if err != nil {
+			h.answerCallback(query.ID, "❌ Ошибка")
+			return
+		}
+
+		ctx := context.Background()
+		goal, err := h.financeService.ContributeToGoal(ctx, goalID, amount)
+		if err != nil {
+			log.Printf("Failed to contribute to goal: %v", err)
+			h.answerCallback(query.ID, "❌ Ошибка при добавлении")
+			return
+		}
+
+		progress := int64(0)
+		if goal.TargetAmount > 0 {
+			progress = (goal.CurrentAmount * 100) / goal.TargetAmount
+		}
+
+		statusText := "✅ Добавлено!"
+		if goal.Status == "completed" {
+			statusText = "🎉 Цель достигнута!"
+		}
+
+		// ✅ Логируем операцию в chat service
+		ctx := context.Background()
+		_ = h.chatClient.LogFinancialOperation(ctx, userID, "GOAL_CONTRIBUTION", fmt.Sprintf("%s: +%d₽ (total: %d₽)", goal.GoalName, amount, goal.CurrentAmount))
+
+		h.answerCallback(query.ID, statusText)
+		h.sendMessage(chatID, fmt.Sprintf(
+			"%s\n\n🎯 %s\nСобрано: %d₽ / %d₽ (%d%%)",
+			statusText, goal.GoalName, goal.CurrentAmount, goal.TargetAmount, progress,
+		))
+
+	case "withdraw":
+		// ✅ Формат: withdraw_{goalID}
+		if len(parts) < 2 {
+			h.answerCallback(query.ID, "❌ Ошибка формата")
+			return
+		}
+		goalID, err := strconv.ParseInt(parts[1], 10, 64)
+		if err != nil {
+			h.answerCallback(query.ID, "❌ Ошибка")
+			return
+		}
+
+		ctx := context.Background()
+		goal, err := h.financeService.GetUserGoalByID(ctx, userID, goalID)
+		if err != nil {
+			log.Printf("Failed to get goal: %v", err)
+			h.answerCallback(query.ID, "❌ Ошибка")
+			return
+		}
+
+		if goal.CurrentAmount == 0 {
+			h.answerCallback(query.ID, "ℹ️ На цели нет средств")
+			return
+		}
+
+		// ✅ Сохраняем goalID для следующего шага
+		h.stateManager.SetTempData(userID, "withdraw_goal_id", parts[1])
+		h.stateManager.SetState(userID, state.StateWithdrawingFromGoal)
+		h.answerCallback(query.ID, "✅ Введите сумму для вычета")
+		h.sendMessage(chatID, fmt.Sprintf(
+			"💸 Вычитание из цели: %s\nТекущая сумма: %d₽\n\nВведите сумму для вычета:",
+			goal.GoalName, goal.CurrentAmount,
+		))
 
 	default:
 		h.answerCallback(query.ID, "❓ Неизвестное действие")
@@ -475,4 +678,60 @@ func (h *BotHandler) sendMessageWithKeyboard(
 func (h *BotHandler) answerCallback(callbackQueryID, text string) {
 	callback := tgbotapi.NewCallback(callbackQueryID, text)
 	h.bot.Request(callback)
+}
+
+// ✅ calculateTimeToGoal рассчитывает время до достижения цели
+func (h *BotHandler) calculateTimeToGoal(targetAmount, monthlyContrib, currentAmount int64) string {
+	remaining := targetAmount - currentAmount
+	if remaining <= 0 {
+		return "Цель достигнута! 🎉"
+	}
+
+	if monthlyContrib <= 0 {
+		return "Недостаточно средств для накопления"
+	}
+
+	months := remaining / monthlyContrib
+	if remaining%monthlyContrib > 0 {
+		months++
+	}
+
+	years := months / 12
+	months = months % 12
+	days := (remaining % monthlyContrib) * 30 / monthlyContrib
+
+	var parts []string
+	if years > 0 {
+		yearWord := "лет"
+		if years == 1 {
+			yearWord = "год"
+		} else if years >= 2 && years <= 4 {
+			yearWord = "года"
+		}
+		parts = append(parts, fmt.Sprintf("%d %s", years, yearWord))
+	}
+	if months > 0 {
+		monthWord := "месяцев"
+		if months == 1 {
+			monthWord = "месяц"
+		} else if months >= 2 && months <= 4 {
+			monthWord = "месяца"
+		}
+		parts = append(parts, fmt.Sprintf("%d %s", months, monthWord))
+	}
+	if days > 0 && years == 0 {
+		dayWord := "дней"
+		if days == 1 {
+			dayWord = "день"
+		} else if days >= 2 && days <= 4 {
+			dayWord = "дня"
+		}
+		parts = append(parts, fmt.Sprintf("%d %s", days, dayWord))
+	}
+
+	if len(parts) == 0 {
+		return "Меньше месяца"
+	}
+
+	return strings.Join(parts, " ")
 }

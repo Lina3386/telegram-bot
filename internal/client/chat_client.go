@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"fmt"
 	"log"
 
 	"google.golang.org/grpc"
@@ -28,16 +29,35 @@ func NewChatClient(addr string) (*ChatClient, error) {
 	return &ChatClient{conn: conn}, nil
 }
 
-// ✅ SendMessage отправляет сообщение
-func (c *ChatClient) SendMessage(ctx context.Context, userID int64, message string) error {
+// ✅ SendMessage отправляет сообщение в chat service для логирования
+// ПРИМЕЧАНИЕ: Для работы нужен сгенерированный proto код
+func (c *ChatClient) SendMessage(ctx context.Context, chatID int64, from string, message string) error {
 	if c.conn == nil {
-		log.Printf("⚠️  Chat service not connected, skipping message send")
+		log.Printf("⚠️  Chat service not connected, skipping message log")
 		return nil
 	}
 
-	// TODO: Реальный gRPC вызов
-	log.Printf("📤 Message sent to user %d: %s", userID, message)
+	// TODO: После генерации proto кода раскомментировать:
+	// client := note.NewChatApiClient(c.conn)
+	// _, err := client.SendMessage(ctx, &note.SendMessageRequest{
+	//     ChatId: chatID,
+	//     From:   from,
+	//     Text:   message,
+	//     Timestamp: timestamppb.Now(),
+	// })
+	// if err != nil {
+	//     return fmt.Errorf("failed to send message to chat service: %w", err)
+	// }
+
+	// Временная реализация - просто логируем
+	log.Printf("📤 [Chat Service] ChatID=%d, From=%s: %s", chatID, from, message)
 	return nil
+}
+
+// ✅ LogFinancialOperation логирует финансовую операцию
+func (c *ChatClient) LogFinancialOperation(ctx context.Context, userID int64, operation string, details string) error {
+	// Используем userID как chatID для логирования операций пользователя
+	return c.SendMessage(ctx, userID, "system", fmt.Sprintf("[FINANCE] %s: %s", operation, details))
 }
 
 // ✅ GetMessage получает сообщения для пользователя

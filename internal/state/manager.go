@@ -8,14 +8,16 @@ import (
 type DialogState string
 
 const (
-	StateIdle                DialogState = "idle"
-	StateAddingIncome        DialogState = "adding_income"
-	StateAddingIncomeAmount  DialogState = "adding_income_amount"
-	StateAddingIncomeDay     DialogState = "adding_income_day"
-	StateAddingExpense       DialogState = "adding_expense"
-	StateAddingExpenseAmount DialogState = "adding_expense_amount"
-	StateCreatingGoal        DialogState = "creating_goal"
-	StateCreatingGoalTarget  DialogState = "creating_goal_target"
+	StateIdle                  DialogState = "idle"
+	StateAddingIncome          DialogState = "adding_income"
+	StateAddingIncomeAmount    DialogState = "adding_income_amount"
+	StateAddingIncomeDay       DialogState = "adding_income_day"
+	StateAddingExpense         DialogState = "adding_expense"
+	StateAddingExpenseAmount   DialogState = "adding_expense_amount"
+	StateCreatingGoal          DialogState = "creating_goal"
+	StateCreatingGoalTarget    DialogState = "creating_goal_target"
+	StateCreatingGoalPriority  DialogState = "creating_goal_priority"
+	StateWithdrawingFromGoal   DialogState = "withdrawing_from_goal"
 )
 
 // UserSession хранит информацию о сессии пользователя
