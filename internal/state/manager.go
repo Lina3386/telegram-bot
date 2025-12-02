@@ -4,7 +4,6 @@ import (
 	"sync"
 )
 
-// DialogState возможные состояния диалога
 type DialogState string
 
 const (
@@ -20,10 +19,10 @@ const (
 
 // UserSession хранит информацию о сессии пользователя
 type UserSession struct {
-	UserID      int64
-	State       DialogState
-	TempData    map[string]string
-	LastMessage int64 // ID последнего сообщения для отслеживания
+	UserID   int64
+	State    DialogState
+	TempData map[string]string
+	mu       sync.RWMutex
 }
 
 // StateManager управляет состояниями пользователей
@@ -91,25 +90,32 @@ func (sm *StateManager) SetTempData(userID int64, key, value string) {
 	defer sm.mu.Unlock()
 
 	if session, exists := sm.sessions[userID]; exists {
+		session.mu.Lock()
+		defer session.mu.Unlock()
 		session.TempData[key] = value
 	} else {
-		sm.sessions[userID] = &UserSession{
+		session := &UserSession{
 			UserID:   userID,
 			State:    StateIdle,
 			TempData: map[string]string{key: value},
 		}
+		sm.sessions[userID] = session
 	}
 }
 
 // GetTempData получает временные данные
 func (sm *StateManager) GetTempData(userID int64, key string) string {
 	sm.mu.RLock()
-	defer sm.mu.RUnlock()
+	session, exists := sm.sessions[userID]
+	sm.mu.RUnlock()
 
-	if session, exists := sm.sessions[userID]; exists {
-		return session.TempData[key]
+	if !exists {
+		return ""
 	}
-	return ""
+
+	session.mu.RLock()
+	defer session.mu.RUnlock()
+	return session.TempData[key]
 }
 
 // ClearSession очищает сессию пользователя

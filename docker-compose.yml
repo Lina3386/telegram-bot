@@ -19,6 +19,8 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    networks:
+      - kapel-network
 
   telegram-bot:
     build:
@@ -33,8 +35,8 @@ services:
       DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: ${DB_NAME}
       DB_SSLMODE: disable
-      AUTH_SERVICE_URL: localhost:50051
-      CHAT_SERVICE_URL: localhost:50052
+      AUTH_SERVICE_URL: auth-service:50053
+      CHAT_SERVICE_URL: chat-service:50055
       DEBUG: "true"
     ports:
       - "8081:8081"
@@ -42,6 +44,13 @@ services:
       postgres:
         condition: service_healthy
     restart: unless-stopped
+    networks:
+      - kapel-network
 
 volumes:
   postgres_data:
+
+networks:
+  kapel-network:
+    driver: bridge
+    name: kapel-network

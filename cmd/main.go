@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/Lina3386/telegram-bot/internal/client"
 	"github.com/Lina3386/telegram-bot/internal/config"
@@ -16,76 +17,112 @@ import (
 )
 
 func main() {
-	// ✅ Загружаем конфиг
 	cfg := config.LoadConfig()
-	log.Println("✅ Config loaded")
+	log.Println("Config loaded")
 
-	// ✅ Проверяем TOKEN
 	if cfg.TelegramToken == "" {
-		log.Fatal("❌ TELEGRAM_BOT_TOKEN not set")
+		log.Fatal("TELEGRAM_BOT_TOKEN not set")
 	}
 
-	// ✅ Подключаемся к БД
 	db, err := config.ConnectDB(cfg.DatabaseURL)
 	if err != nil {
-		log.Fatalf("❌ Failed to connect to DB: %v", err)
+		log.Fatalf("Failed to connect to DB: %v", err)
 	}
 	defer db.Close()
-	log.Println("✅ Connected to DB")
+	log.Println("Connected to DB")
 
-	// ✅ Создаем Telegram бота
 	bot, err := tgbotapi.NewBotAPI(cfg.TelegramToken)
 	if err != nil {
-		log.Fatalf("❌ Failed to create bot: %v", err)
+		log.Fatalf("Failed to create bot: %v", err)
 	}
 	bot.Debug = cfg.Debug
-	log.Printf("✅ Bot authorized: @%s\n", bot.Self.UserName)
+	log.Printf("Bot authorized: @%s\n", bot.Self.UserName)
 
-	// ✅ Подключаемся к Auth сервису (CRITICAL - проверяем ошибку!)
-	authClient, err := client.NewAuthClient(cfg.AuthServiceURL)
-	if err != nil {
-		log.Fatalf("❌ Failed to connect to auth service: %v", err)
+	var authClient *client.AuthClient
+	connectedToAuth := false
+
+	for attempt := 1; attempt <= 3; attempt++ {
+		var err error
+		authClient, err = client.NewAuthClient(cfg.AuthServiceURL)
+
+		if err == nil {
+			log.Println("Connected to auth service")
+			connectedToAuth = true
+			break
+		}
+
+		if attempt < 3 {
+			log.Printf("Auth service connection attempt %d/3 failed, retrying in 2 seconds...", attempt)
+			time.Sleep(2 * time.Second)
+		}
 	}
-	defer authClient.Close()
-	log.Println("✅ Connected to auth service")
 
-	// ✅ Подключаемся к Chat сервису (CRITICAL - проверяем ошибку!)
-	chatClient, err := client.NewChatClient(cfg.ChatServiceURL)
-	if err != nil {
-		log.Fatalf("❌ Failed to connect to chat service: %v", err)
+	if !connectedToAuth {
+		log.Printf("WARNING: Auth service unavailable - running in offline mode")
+		log.Printf("User registration will use fallback mode")
+
+		authClient = &client.AuthClient{}
 	}
-	defer chatClient.Close()
-	log.Println("✅ Connected to chat service")
 
-	// ✅ Инициализируем сервисы
+	defer func() {
+		if authClient != nil {
+			authClient.Close()
+		}
+	}()
+
+	var chatClient *client.ChatClient
+	connectedToChat := false
+
+	for attempt := 1; attempt <= 3; attempt++ {
+		var err error
+		chatClient, err = client.NewChatClient(cfg.ChatServiceURL)
+
+		if err == nil {
+			log.Println("Connected to chat service")
+			connectedToChat = true
+			break
+		}
+
+		if attempt < 3 {
+			log.Printf("Chat service connection attempt %d/3 failed, retrying in 2 seconds...", attempt)
+			time.Sleep(2 * time.Second)
+		}
+	}
+
+	if !connectedToChat {
+		log.Printf("WARNING: Chat service unavailable")
+		chatClient = &client.ChatClient{} // fallback
+	}
+
+	defer func() {
+		if chatClient != nil {
+			chatClient.Close()
+		}
+	}()
+
 	financeService := services.NewFinanceService(db)
 	stateManager := state.NewStateManager()
 	botHandler := handlers.NewBotHandler(bot, authClient, chatClient, financeService, stateManager)
 
-	// ✅ Настраиваем обновления
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
 
 	updates := bot.GetUpdatesChan(u)
-	log.Println("🤖 Bot is running... (Press Ctrl+C to stop)")
+	log.Println("Bot is running... (Press Ctrl+C to stop)")
 
-	// ✅ Обработчик сигналов для корректного завершения
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-	// ✅ ОСНОВНОЙ ЦИКЛ ОБРАБОТКИ
 	for {
 		select {
 		case <-sigChan:
-			log.Println("\n⏹️  Shutting down gracefully...")
+			log.Println("\n Shutting down gracefully...")
 			return
 
 		case update := <-updates:
-			// ✅ Обработка команд
 			if update.Message != nil {
-				log.Printf("📨 Message from %d: %s", update.Message.From.ID, update.Message.Text)
+				log.Printf(" Message from %d: %s", update.Message.From.ID, update.Message.Text)
 
-				// ✅ Обработка команд
 				if update.Message.IsCommand() {
 					switch update.Message.Command() {
 					case "start":
@@ -98,14 +135,12 @@ func main() {
 						botHandler.HandleUnknownCommand(update.Message)
 					}
 				} else {
-					// ✅ Обработка текстовых сообщений
 					botHandler.HandleTextMessage(update.Message)
 				}
 			}
 
-			// ✅ Обработка нажатия кнопок (callback queries)
 			if update.CallbackQuery != nil {
-				log.Printf("🔘 Callback from %d: %s", update.CallbackQuery.From.ID, update.CallbackQuery.Data)
+				log.Printf("Callback from %d: %s", update.CallbackQuery.From.ID, update.CallbackQuery.Data)
 				botHandler.HandleCallback(update.CallbackQuery)
 			}
 		}

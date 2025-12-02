@@ -19,12 +19,10 @@ type Config struct {
 }
 
 func LoadConfig() *Config {
-	// Загружаем .env файл
 	if err := godotenv.Load(); err != nil {
 		log.Println("⚠️  No .env file found")
 	}
 
-	// Явно читаем каждую переменную
 	dbUser := os.Getenv("DB_USER")
 	dbPassword := os.Getenv("DB_PASSWORD")
 	dbHost := os.Getenv("DB_HOST")
@@ -32,7 +30,6 @@ func LoadConfig() *Config {
 	dbName := os.Getenv("DB_NAME")
 	dbSSLMode := os.Getenv("DB_SSLMODE")
 
-	// Проверяем, что все переменные установлены
 	if dbHost == "" {
 		dbHost = "localhost"
 	}
@@ -52,13 +49,6 @@ func LoadConfig() *Config {
 	}
 }
 
-func getEnv(key, fallback string) string {
-	if value, exists := os.LookupEnv(key); exists {
-		return value
-	}
-	return fallback
-}
-
 func ConnectDB(dbURL string) (*sql.DB, error) {
 	var db *sql.DB
 	var err error
@@ -75,10 +65,9 @@ func ConnectDB(dbURL string) (*sql.DB, error) {
 			continue
 		}
 
-		// ✅ Проверяем подключение
 		err = db.Ping()
 		if err == nil {
-			log.Println("✅ Connected to DB")
+			log.Println("Connected to DB")
 			return db, nil
 		}
 

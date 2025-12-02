@@ -26,7 +26,7 @@ func NewFinanceService(db *sql.DB) *FinanceService {
 	}
 }
 
-// ✅ CreateUser создает нового пользователя
+// создает нового пользователя
 func (s *FinanceService) CreateUser(ctx context.Context, telegramID int64, username string, authToken string) (*models.User, error) {
 	user, err := s.userRepo.CreateUser(ctx, telegramID, username, authToken)
 	if err != nil {
@@ -37,14 +37,12 @@ func (s *FinanceService) CreateUser(ctx context.Context, telegramID int64, usern
 	return user, nil
 }
 
-// ✅ GetUserByTelegramID получает пользователя по Telegram ID
+// получает пользователя по Telegram ID
 func (s *FinanceService) GetUserByTelegramID(ctx context.Context, telegramID int64) (*models.User, error) {
 	return s.userRepo.GetUserByTelegramID(ctx, telegramID)
 }
 
-// ========== ДОХОДЫ ==========
-
-// ✅ CreateIncome создает новый источник дохода
+// создает новый источник дохода
 func (s *FinanceService) CreateIncome(
 	ctx context.Context,
 	userID int64,
@@ -62,12 +60,12 @@ func (s *FinanceService) CreateIncome(
 	return income, nil
 }
 
-// ✅ GetUserIncomes получает все доходы пользователя
+// получает все доходы пользователя
 func (s *FinanceService) GetUserIncomes(ctx context.Context, userID int64) ([]models.Income, error) {
 	return s.incomeRepo.GetUserIncomes(ctx, userID)
 }
 
-// ✅ CalculateTotalIncome считает общий доход
+// считает общий доход
 func (s *FinanceService) CalculateTotalIncome(ctx context.Context, userID int64) (int64, error) {
 	incomes, err := s.incomeRepo.GetUserIncomes(ctx, userID)
 	if err != nil {
@@ -81,9 +79,7 @@ func (s *FinanceService) CalculateTotalIncome(ctx context.Context, userID int64)
 	return total, nil
 }
 
-// ========== РАСХОДЫ ==========
-
-// ✅ CreateExpense создает новый расход
+// создает новый расход
 func (s *FinanceService) CreateExpense(ctx context.Context, userID int64, name string, amount int64) (*models.Expense, error) {
 	expense, err := s.expenseRepo.CreateExpense(ctx, userID, name, amount)
 	if err != nil {
@@ -94,12 +90,12 @@ func (s *FinanceService) CreateExpense(ctx context.Context, userID int64, name s
 	return expense, nil
 }
 
-// ✅ GetUserExpenses получает все расходы пользователя
+// получает все расходы пользователя
 func (s *FinanceService) GetUserExpenses(ctx context.Context, userID int64) ([]models.Expense, error) {
 	return s.expenseRepo.GetUserExpenses(ctx, userID)
 }
 
-// ✅ CalculateTotalExpense считает сумму всех расходов
+// считает сумму всех расходов
 func (s *FinanceService) CalculateTotalExpense(ctx context.Context, userID int64) (int64, error) {
 	expenses, err := s.expenseRepo.GetUserExpenses(ctx, userID)
 	if err != nil {
@@ -113,9 +109,6 @@ func (s *FinanceService) CalculateTotalExpense(ctx context.Context, userID int64
 	return total, nil
 }
 
-// ========== ЦЕЛИ ==========
-
-// ✅ CreateGoal создает цель с автоматическим расчетом
 func (s *FinanceService) CreateGoal(ctx context.Context, userID int64, goalName string, targetAmount int64) (*models.SavingsGoal, error) {
 	availableForSavings, err := s.CalculateAvailableForSavings(ctx, userID)
 	if err != nil {
@@ -123,10 +116,10 @@ func (s *FinanceService) CreateGoal(ctx context.Context, userID int64, goalName 
 	}
 
 	if availableForSavings == 0 {
-		availableForSavings = 1000 // ✅ Минимальный взнос
+		availableForSavings = 1000
 	}
 
-	// ✅ Сколько месяцев до достижения цели
+	// Сколько месяцев до достижения цели
 	monthsNeeded := (targetAmount + availableForSavings - 1) / availableForSavings
 	if monthsNeeded == 0 {
 		monthsNeeded = 1
@@ -134,7 +127,7 @@ func (s *FinanceService) CreateGoal(ctx context.Context, userID int64, goalName 
 
 	targetDate := time.Now().AddDate(0, int(monthsNeeded), 0)
 
-	// ✅ Создаем цель
+	// Создаем цель
 	goal, err := s.goalRepo.CreateGoal(
 		ctx,
 		userID,
@@ -155,17 +148,17 @@ func (s *FinanceService) CreateGoal(ctx context.Context, userID int64, goalName 
 	return goal, nil
 }
 
-// ✅ GetUserGoals получает все цели пользователя
+// получает все цели пользователя
 func (s *FinanceService) GetUserGoals(ctx context.Context, userID int64) ([]models.SavingsGoal, error) {
 	return s.goalRepo.GetUserGoals(ctx, userID)
 }
 
-// ✅ GetUserActiveGoals получает активные цели
+// GetUserActiveGoals получает активные цели
 func (s *FinanceService) GetUserActiveGoals(ctx context.Context, userID int64) ([]models.SavingsGoal, error) {
 	return s.goalRepo.GetUserActiveGoals(ctx, userID)
 }
 
-// ✅ ContributeToGoal добавляет деньги к цели
+// добавляет деньги к цели
 func (s *FinanceService) ContributeToGoal(ctx context.Context, goalID int64, amount int64) (*models.SavingsGoal, error) {
 	goal, err := s.goalRepo.GetGoalByID(ctx, goalID)
 	if err != nil {
@@ -187,9 +180,7 @@ func (s *FinanceService) ContributeToGoal(ctx context.Context, goalID int64, amo
 	return goal, nil
 }
 
-// ========== ФИНАНСОВЫЙ АНАЛИЗ ==========
-
-// ✅ CalculateAvailableForSavings рассчитывает доступный бюджет: доходы - расходы
+// рассчитывает доступный бюджет: доходы - расходы
 func (s *FinanceService) CalculateAvailableForSavings(ctx context.Context, userID int64) (int64, error) {
 	totalIncome, err := s.CalculateTotalIncome(ctx, userID)
 	if err != nil {
