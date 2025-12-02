@@ -114,3 +114,58 @@ func (r *IncomeRepository) DeleteIncome(ctx context.Context, incomeID int64) err
 	)
 	return err
 }
+
+// ✅ GetIncomesByPayDate получает доходы с определенной датой получки
+// Возвращает доходы с telegram_id пользователя для уведомлений
+func (r *IncomeRepository) GetIncomesByPayDate(ctx context.Context, payDate time.Time) ([]models.Income, error) {
+	startOfDay := time.Date(payDate.Year(), payDate.Month(), payDate.Day(), 0, 0, 0, 0, payDate.Location())
+	endOfDay := startOfDay.Add(24 * time.Hour)
+
+	rows, err := r.db.QueryContext(
+		ctx,
+		`SELECT i.id, i.user_id, i.name, i.amount, i.recurring_day, i.next_pay_date, i.created_at, i.updated_at, u.telegram_id
+		 FROM incomes i
+		 JOIN users u ON i.user_id = u.id
+		 WHERE i.next_pay_date >= $1 AND i.next_pay_date < $2`,
+		startOfDay, endOfDay,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var incomes []models.Income
+	for rows.Next() {
+		income := models.Income{}
+		var telegramID int64
+		err := rows.Scan(
+			&income.ID,
+			&income.UserID,
+			&income.Name,
+			&income.Amount,
+			&income.RecurringDay,
+			&income.NextPayDate,
+			&income.CreatedAt,
+			&income.UpdatedAt,
+			&telegramID,
+		)
+		if err != nil {
+			return nil, err
+		}
+		// ✅ Сохраняем telegram_id в UserID для удобства в scheduler
+		income.UserID = telegramID
+		incomes = append(incomes, income)
+	}
+
+	return incomes, rows.Err()
+}
+
+// ✅ UpdateIncomeNextPayDate обновляет дату следующей получки
+func (r *IncomeRepository) UpdateIncomeNextPayDate(ctx context.Context, incomeID int64, nextPayDate time.Time) error {
+	_, err := r.db.ExecContext(
+		ctx,
+		`UPDATE incomes SET next_pay_date = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
+		nextPayDate, incomeID,
+	)
+	return err
+}

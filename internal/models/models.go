@@ -44,6 +44,7 @@ type SavingsGoal struct {
 	CurrentAmount  int64
 	MonthlyContrib int64
 	TargetDate     time.Time
+	Priority       int // 1 - высший, 2 - средний, 3 - низкий
 	Status         string
 	CreatedAt      time.Time
 	UpdatedAt      time.Time

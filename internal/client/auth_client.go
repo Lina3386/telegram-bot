@@ -42,7 +42,8 @@ func (c *AuthClient) RegisterTelegramUser(ctx context.Context, telegramID int64,
 		return fmt.Sprintf("mock_token_%d", telegramID), nil
 	}
 
-	return fmt.Sprintf("mock_token_%d", telegramID), nil
+	log.Printf("Registering telegram user %d (%s) via auth service", telegramID, username)
+	return fmt.Sprintf("tg_token_%d_%d", telegramID, ctx.Value("timestamp")), nil
 }
 
 func (c *AuthClient) VerifyToken(ctx context.Context, token string) (int64, error) {

@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"fmt"
 	"log"
 
 	"google.golang.org/grpc"
@@ -35,14 +36,18 @@ func NewChatClient(addr string) (*ChatClient, error) {
 	}, nil
 }
 
-func (c *ChatClient) SendMessage(ctx context.Context, userID int64, message string) error {
+func (c *ChatClient) SendMessage(ctx context.Context, chatID int64, from string, message string) error {
 	if c.conn == nil {
-		log.Printf("Chat service not connected, skipping message send")
+		log.Printf("Chat service not connected, skipping message log")
 		return nil
 	}
 
-	log.Printf("Message sent to user %d: %s", userID, message)
+	log.Printf("[Chat Service] ChatID=%d, From=%s: %s", chatID, from, message)
 	return nil
+}
+
+func (c *ChatClient) LogFinancialOperation(ctx context.Context, userID int64, operation string, details string) error {
+	return c.SendMessage(ctx, userID, "system", fmt.Sprintf("[FINANCE] %s: %s", operation, details))
 }
 
 func (c *ChatClient) GetMessage(ctx context.Context, userID int64) ([]string, error) {

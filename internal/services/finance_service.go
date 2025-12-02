@@ -2,27 +2,32 @@ package services
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"time"
 
-	"database/sql"
 	"github.com/Lina3386/telegram-bot/internal/models"
 	"github.com/Lina3386/telegram-bot/internal/repository"
 )
 
 type FinanceService struct {
-	userRepo    *repository.UserRepository
-	incomeRepo  *repository.IncomeRepository
-	expenseRepo *repository.ExpenseRepository
-	goalRepo    *repository.GoalRepository
+	userRepo    repository.UserRepository
+	incomeRepo  repository.IncomeRepository
+	expenseRepo repository.ExpenseRepository
+	goalRepo    repository.GoalRepository
 }
 
-func NewFinanceService(db *sql.DB) *FinanceService {
+func NewFinanceService(
+	userRepo repository.UserRepository,
+	incomeRepo repository.IncomeRepository,
+	expenseRepo repository.ExpenseRepository,
+	goalRepo repository.GoalRepository,
+) *FinanceService {
 	return &FinanceService{
-		userRepo:    repository.NewUserRepository(db),
-		incomeRepo:  repository.NewIncomeRepository(db),
-		expenseRepo: repository.NewExpenseRepository(db),
-		goalRepo:    repository.NewGoalRepository(db),
+		userRepo:    userRepo,
+		incomeRepo:  incomeRepo,
+		expenseRepo: expenseRepo,
+		goalRepo:    goalRepo,
 	}
 }
 
@@ -79,7 +84,14 @@ func (s *FinanceService) CalculateTotalIncome(ctx context.Context, userID int64)
 	return total, nil
 }
 
-// создает новый расход
+func (s *FinanceService) GetIncomesByPayDate(ctx context.Context, payDate time.Time) ([]models.Income, error) {
+	return s.incomeRepo.GetIncomesByPayDate(ctx, payDate)
+}
+
+func (s *FinanceService) UpdateIncomeNextPayDate(ctx context.Context, incomeID int64, nextPayDate time.Time) error {
+	return s.incomeRepo.UpdateIncomeNextPayDate(ctx, incomeID, nextPayDate)
+}
+
 func (s *FinanceService) CreateExpense(ctx context.Context, userID int64, name string, amount int64) (*models.Expense, error) {
 	expense, err := s.expenseRepo.CreateExpense(ctx, userID, name, amount)
 	if err != nil {
@@ -109,18 +121,25 @@ func (s *FinanceService) CalculateTotalExpense(ctx context.Context, userID int64
 	return total, nil
 }
 
-func (s *FinanceService) CreateGoal(ctx context.Context, userID int64, goalName string, targetAmount int64) (*models.SavingsGoal, error) {
+func (s *FinanceService) CreateGoal(ctx context.Context, userID int64, goalName string, targetAmount int64, priority int) (*models.SavingsGoal, error) {
 	availableForSavings, err := s.CalculateAvailableForSavings(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
 
-	if availableForSavings == 0 {
-		availableForSavings = 1000
+	activeGoals, err := s.goalRepo.GetUserActiveGoals(ctx, userID)
+	if err != nil {
+		return nil, err
 	}
 
-	// Сколько месяцев до достижения цели
-	monthsNeeded := (targetAmount + availableForSavings - 1) / availableForSavings
+	monthlyContrib := s.distributeFundsToGoal(availableForSavings, activeGoals, priority)
+
+	if monthlyContrib == 0 {
+		monthlyContrib = 1000
+	}
+
+	// месяцев до достижения цели
+	monthsNeeded := (targetAmount + monthlyContrib - 1) / monthlyContrib
 	if monthsNeeded == 0 {
 		monthsNeeded = 1
 	}
@@ -133,8 +152,9 @@ func (s *FinanceService) CreateGoal(ctx context.Context, userID int64, goalName 
 		userID,
 		goalName,
 		targetAmount,
-		availableForSavings,
+		monthlyContrib,
 		targetDate,
+		priority,
 	)
 
 	if err != nil {
@@ -142,23 +162,58 @@ func (s *FinanceService) CreateGoal(ctx context.Context, userID int64, goalName 
 		return nil, err
 	}
 
-	log.Printf("Goal created: %s, Target=%d, MonthlyContrib=%d, TargetDate=%s",
-		goalName, targetAmount, availableForSavings, targetDate.Format("02.01.2006"))
+	log.Printf("Goal created: %s, Target=%d, MonthlyContrib=%d, Priority=%d, TargetDate=%s",
+		goalName, targetAmount, monthlyContrib, priority, targetDate.Format("02.01.2006"))
 
 	return goal, nil
 }
 
-// получает все цели пользователя
+func (s *FinanceService) distributeFundsToGoal(availableFunds int64, existingGoals []models.SavingsGoal, newPriority int) int64 {
+	if len(existingGoals) == 0 {
+		return availableFunds
+	}
+
+	totalPriorityWeight := int64(0)
+	for _, goal := range existingGoals {
+		weight := int64(4 - goal.Priority)
+		totalPriorityWeight += weight
+	}
+
+	newWeight := int64(4 - newPriority)
+	totalPriorityWeight += newWeight
+
+	newGoalShare := (availableFunds * newWeight) / totalPriorityWeight
+
+	return newGoalShare
+}
+
 func (s *FinanceService) GetUserGoals(ctx context.Context, userID int64) ([]models.SavingsGoal, error) {
 	return s.goalRepo.GetUserGoals(ctx, userID)
 }
 
-// GetUserActiveGoals получает активные цели
 func (s *FinanceService) GetUserActiveGoals(ctx context.Context, userID int64) ([]models.SavingsGoal, error) {
 	return s.goalRepo.GetUserActiveGoals(ctx, userID)
 }
 
-// добавляет деньги к цели
+func (s *FinanceService) GetUserActiveGoalsByTelegramID(ctx context.Context, telegramID int64) ([]models.SavingsGoal, error) {
+	user, err := s.userRepo.GetUserByTelegramID(ctx, telegramID)
+	if err != nil {
+		return nil, err
+	}
+	return s.goalRepo.GetUserActiveGoals(ctx, user.ID)
+}
+
+func (s *FinanceService) GetUserGoalByID(ctx context.Context, userID int64, goalID int64) (*models.SavingsGoal, error) {
+	goal, err := s.goalRepo.GetGoalByID(ctx, goalID)
+	if err != nil {
+		return nil, err
+	}
+	if goal.UserID != userID {
+		return nil, fmt.Errorf("goal does not belong to user")
+	}
+	return goal, nil
+}
+
 func (s *FinanceService) ContributeToGoal(ctx context.Context, goalID int64, amount int64) (*models.SavingsGoal, error) {
 	goal, err := s.goalRepo.GetGoalByID(ctx, goalID)
 	if err != nil {
@@ -169,6 +224,7 @@ func (s *FinanceService) ContributeToGoal(ctx context.Context, goalID int64, amo
 
 	if goal.CurrentAmount >= goal.TargetAmount {
 		goal.Status = "completed"
+		goal.CurrentAmount = goal.TargetAmount // Не даем превысить целевую сумму
 		log.Printf("Goal %d reached!", goalID)
 	}
 
@@ -180,7 +236,31 @@ func (s *FinanceService) ContributeToGoal(ctx context.Context, goalID int64, amo
 	return goal, nil
 }
 
-// рассчитывает доступный бюджет: доходы - расходы
+func (s *FinanceService) WithdrawFromGoal(ctx context.Context, goalID int64, amount int64) (*models.SavingsGoal, error) {
+	goal, err := s.goalRepo.GetGoalByID(ctx, goalID)
+	if err != nil {
+		return nil, err
+	}
+
+	if goal.CurrentAmount < amount {
+		goal.CurrentAmount = 0
+	} else {
+		goal.CurrentAmount -= amount
+	}
+
+	if goal.Status == "completed" && goal.CurrentAmount < goal.TargetAmount {
+		goal.Status = "active"
+	}
+
+	err = s.goalRepo.UpdateGoal(ctx, goal)
+	if err != nil {
+		return nil, err
+	}
+
+	log.Printf("Withdrew %d from goal %d, new amount: %d", amount, goalID, goal.CurrentAmount)
+	return goal, nil
+}
+
 func (s *FinanceService) CalculateAvailableForSavings(ctx context.Context, userID int64) (int64, error) {
 	totalIncome, err := s.CalculateTotalIncome(ctx, userID)
 	if err != nil {
