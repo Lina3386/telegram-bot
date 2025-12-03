@@ -48,13 +48,20 @@ func (s *FinanceService) GetUserByTelegramID(ctx context.Context, telegramID int
 
 func (s *FinanceService) CreateIncome(
 	ctx context.Context,
-	userID int64,
+	telegramID int64,
 	name string,
 	amount int64,
 	recurringDay int,
 	nextPayDate time.Time,
 ) (*models.Income, error) {
-	income, err := s.incomeRepo.CreateIncome(ctx, userID, name, amount, recurringDay, nextPayDate)
+	// ✅ Получаем пользователя по telegram_id, чтобы получить внутренний ID
+	user, err := s.userRepo.GetUserByTelegramID(ctx, telegramID)
+	if err != nil {
+		return nil, fmt.Errorf("user not found: %w", err)
+	}
+
+	// ✅ Используем внутренний ID пользователя
+	income, err := s.incomeRepo.CreateIncome(ctx, user.ID, name, amount, recurringDay, nextPayDate)
 	if err != nil {
 		log.Printf("Failed to create income: %v", err)
 		return nil, err
@@ -63,12 +70,17 @@ func (s *FinanceService) CreateIncome(
 	return income, nil
 }
 
-func (s *FinanceService) GetUserIncomes(ctx context.Context, userID int64) ([]models.Income, error) {
-	return s.incomeRepo.GetUserIncomes(ctx, userID)
+func (s *FinanceService) GetUserIncomes(ctx context.Context, telegramID int64) ([]models.Income, error) {
+	// ✅ Получаем пользователя по telegram_id
+	user, err := s.userRepo.GetUserByTelegramID(ctx, telegramID)
+	if err != nil {
+		return nil, fmt.Errorf("user not found: %w", err)
+	}
+	return s.incomeRepo.GetUserIncomes(ctx, user.ID)
 }
 
-func (s *FinanceService) CalculateTotalIncome(ctx context.Context, userID int64) (int64, error) {
-	incomes, err := s.incomeRepo.GetUserIncomes(ctx, userID)
+func (s *FinanceService) CalculateTotalIncome(ctx context.Context, telegramID int64) (int64, error) {
+	incomes, err := s.GetUserIncomes(ctx, telegramID)
 	if err != nil {
 		return 0, err
 	}
@@ -88,8 +100,14 @@ func (s *FinanceService) UpdateIncomeNextPayDate(ctx context.Context, incomeID i
 	return s.incomeRepo.UpdateIncomeNextPayDate(ctx, incomeID, nextPayDate)
 }
 
-func (s *FinanceService) CreateExpense(ctx context.Context, userID int64, name string, amount int64) (*models.Expense, error) {
-	expense, err := s.expenseRepo.CreateExpense(ctx, userID, name, amount)
+func (s *FinanceService) CreateExpense(ctx context.Context, telegramID int64, name string, amount int64) (*models.Expense, error) {
+	// ✅ Получаем пользователя по telegram_id
+	user, err := s.userRepo.GetUserByTelegramID(ctx, telegramID)
+	if err != nil {
+		return nil, fmt.Errorf("user not found: %w", err)
+	}
+
+	expense, err := s.expenseRepo.CreateExpense(ctx, user.ID, name, amount)
 	if err != nil {
 		log.Printf("Failed to create expense: %v", err)
 		return nil, err
@@ -99,12 +117,17 @@ func (s *FinanceService) CreateExpense(ctx context.Context, userID int64, name s
 }
 
 
-func (s *FinanceService) GetUserExpenses(ctx context.Context, userID int64) ([]models.Expense, error) {
-	return s.expenseRepo.GetUserExpenses(ctx, userID)
+func (s *FinanceService) GetUserExpenses(ctx context.Context, telegramID int64) ([]models.Expense, error) {
+	// ✅ Получаем пользователя по telegram_id
+	user, err := s.userRepo.GetUserByTelegramID(ctx, telegramID)
+	if err != nil {
+		return nil, fmt.Errorf("user not found: %w", err)
+	}
+	return s.expenseRepo.GetUserExpenses(ctx, user.ID)
 }
 
-func (s *FinanceService) CalculateTotalExpense(ctx context.Context, userID int64) (int64, error) {
-	expenses, err := s.expenseRepo.GetUserExpenses(ctx, userID)
+func (s *FinanceService) CalculateTotalExpense(ctx context.Context, telegramID int64) (int64, error) {
+	expenses, err := s.GetUserExpenses(ctx, telegramID)
 	if err != nil {
 		return 0, err
 	}
@@ -117,13 +140,20 @@ func (s *FinanceService) CalculateTotalExpense(ctx context.Context, userID int64
 }
 
 
-func (s *FinanceService) CreateGoal(ctx context.Context, userID int64, goalName string, targetAmount int64, priority int) (*models.SavingsGoal, error) {
-	availableForSavings, err := s.CalculateAvailableForSavings(ctx, userID)
+func (s *FinanceService) CreateGoal(ctx context.Context, telegramID int64, goalName string, targetAmount int64, priority int) (*models.SavingsGoal, error) {
+	// ✅ Получаем пользователя по telegram_id
+	user, err := s.userRepo.GetUserByTelegramID(ctx, telegramID)
+	if err != nil {
+		return nil, fmt.Errorf("user not found: %w", err)
+	}
+
+	availableForSavings, err := s.CalculateAvailableForSavings(ctx, telegramID)
 	if err != nil {
 		return nil, err
 	}
 
-	activeGoals, err := s.goalRepo.GetUserActiveGoals(ctx, userID)
+	// ✅ Получаем активные цели по внутреннему ID пользователя
+	activeGoals, err := s.goalRepo.GetUserActiveGoals(ctx, user.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -142,9 +172,10 @@ func (s *FinanceService) CreateGoal(ctx context.Context, userID int64, goalName 
 
 	targetDate := time.Now().AddDate(0, int(monthsNeeded), 0)
 
+	// ✅ Используем внутренний ID пользователя
 	goal, err := s.goalRepo.CreateGoal(
 		ctx,
-		userID,
+		user.ID,
 		goalName,
 		targetAmount,
 		monthlyContrib,
@@ -183,8 +214,13 @@ func (s *FinanceService) distributeFundsToGoal(availableFunds int64, existingGoa
 	return newGoalShare
 }
 
-func (s *FinanceService) GetUserGoals(ctx context.Context, userID int64) ([]models.SavingsGoal, error) {
-	return s.goalRepo.GetUserGoals(ctx, userID)
+func (s *FinanceService) GetUserGoals(ctx context.Context, telegramID int64) ([]models.SavingsGoal, error) {
+	// ✅ Получаем пользователя по telegram_id
+	user, err := s.userRepo.GetUserByTelegramID(ctx, telegramID)
+	if err != nil {
+		return nil, fmt.Errorf("user not found: %w", err)
+	}
+	return s.goalRepo.GetUserGoals(ctx, user.ID)
 }
 
 func (s *FinanceService) GetUserActiveGoals(ctx context.Context, userID int64) ([]models.SavingsGoal, error) {
@@ -192,19 +228,27 @@ func (s *FinanceService) GetUserActiveGoals(ctx context.Context, userID int64) (
 }
 
 func (s *FinanceService) GetUserActiveGoalsByTelegramID(ctx context.Context, telegramID int64) ([]models.SavingsGoal, error) {
+	// ✅ Получаем пользователя по telegram_id
 	user, err := s.userRepo.GetUserByTelegramID(ctx, telegramID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("user not found: %w", err)
 	}
 	return s.goalRepo.GetUserActiveGoals(ctx, user.ID)
 }
 
-func (s *FinanceService) GetUserGoalByID(ctx context.Context, userID int64, goalID int64) (*models.SavingsGoal, error) {
+func (s *FinanceService) GetUserGoalByID(ctx context.Context, telegramID int64, goalID int64) (*models.SavingsGoal, error) {
+	// ✅ Получаем пользователя по telegram_id
+	user, err := s.userRepo.GetUserByTelegramID(ctx, telegramID)
+	if err != nil {
+		return nil, fmt.Errorf("user not found: %w", err)
+	}
+
 	goal, err := s.goalRepo.GetGoalByID(ctx, goalID)
 	if err != nil {
 		return nil, err
 	}
-	if goal.UserID != userID {
+	// ✅ Проверяем по внутреннему ID пользователя
+	if goal.UserID != user.ID {
 		return nil, fmt.Errorf("goal does not belong to user")
 	}
 	return goal, nil
@@ -257,13 +301,13 @@ func (s *FinanceService) WithdrawFromGoal(ctx context.Context, goalID int64, amo
 	return goal, nil
 }
 
-func (s *FinanceService) CalculateAvailableForSavings(ctx context.Context, userID int64) (int64, error) {
-	totalIncome, err := s.CalculateTotalIncome(ctx, userID)
+func (s *FinanceService) CalculateAvailableForSavings(ctx context.Context, telegramID int64) (int64, error) {
+	totalIncome, err := s.CalculateTotalIncome(ctx, telegramID)
 	if err != nil {
 		return 0, err
 	}
 
-	totalExpense, err := s.CalculateTotalExpense(ctx, userID)
+	totalExpense, err := s.CalculateTotalExpense(ctx, telegramID)
 	if err != nil {
 		return 0, err
 	}
