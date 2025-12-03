@@ -49,6 +49,21 @@ func (h *BotHandler) HandleStart(message *tgbotapi.Message) {
 	ctx := context.Background()
 	log.Printf("User %d (%s) started the bot", userID, username)
 
+	// Проверяем, существует ли пользователь
+	existingUser, err := h.financeService.GetUserByTelegramID(ctx, userID)
+	if err == nil && existingUser != nil {
+		// Пользователь уже существует - просто приветствуем
+		log.Printf("User %d already exists, welcome back!", userID)
+		h.stateManager.ClearState(userID)
+		msg := fmt.Sprintf("👋 С возвращением, %s!\n\n"+
+			"Выберите действие:",
+			username,
+		)
+		h.sendMessageWithKeyboard(chatID, msg, h.mainMenu())
+		return
+	}
+
+	// Регистрируем нового пользователя
 	token, err := h.authClient.RegisterTelegramUser(ctx, userID, username)
 	if err != nil {
 		log.Printf("Failed to register user: %v", err)
@@ -61,6 +76,19 @@ func (h *BotHandler) HandleStart(message *tgbotapi.Message) {
 	_, err = h.financeService.CreateUser(ctx, userID, username, token)
 	if err != nil {
 		log.Printf("Failed to create user in DB: %v", err)
+		// ✅ Проверяем, может пользователь уже был создан в другом потоке
+		existingUser, checkErr := h.financeService.GetUserByTelegramID(ctx, userID)
+		if checkErr == nil && existingUser != nil {
+			log.Printf("User already exists, continuing...")
+			h.stateManager.ClearState(userID)
+			msg := fmt.Sprintf("👋 Добро пожаловать, %s!\n\n"+
+				"Я помогу вам управлять финансами.\n\n"+
+				"Выберите действие:",
+				username,
+			)
+			h.sendMessageWithKeyboard(chatID, msg, h.mainMenu())
+			return
+		}
 		h.sendMessage(chatID, "Ошибка при сохранении данных.")
 		return
 	}
@@ -120,28 +148,28 @@ func (h *BotHandler) HandleTextMessage(message *tgbotapi.Message) {
 	currentState := h.stateManager.GetState(userID)
 
 	switch text {
-	case "➕ Добавить доход":
+	case "➕ Добавить доход", "добавить доход", "доход":
 		h.stateManager.SetState(userID, state.StateAddingIncome)
 		h.sendMessage(chatID, "Введите название дохода (например: Зарплата, Пособие):")
 		return
 
-	case "📊 Мои доходы":
+	case "📊 Мои доходы", "мои доходы", "доходы":
 		h.handleShowIncomes(message)
 		return
 
-	case "💰 Мои расходы":
+	case "💰 Мои расходы", "мои расходы", "расходы":
 		h.handleShowExpenses(message)
 		return
 
-	case "🎯 Цели":
+	case "🎯 Цели", "цели", "цель":
 		h.handleShowGoals(message)
 		return
 
-	case "📈 Статистика":
+	case "📈 Статистика", "статистика", "стата":
 		h.handleShowStats(message)
 		return
 
-	case "⬅️ Назад":
+	case "⬅️ Назад", "назад":
 		h.stateManager.ClearState(userID)
 		h.sendMessageWithKeyboard(chatID, "Вернулись в главное меню", h.mainMenu())
 		return
