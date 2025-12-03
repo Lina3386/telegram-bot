@@ -28,10 +28,10 @@ type ServiceProvider struct {
 	dbClient db.Client
 
 	// Repositories
-	userRepo    repository.UserRepository
-	incomeRepo  repository.IncomeRepository
-	expenseRepo repository.ExpenseRepository
-	goalRepo    repository.GoalRepository
+	userRepo    *repository.UserRepository
+	incomeRepo  *repository.IncomeRepository
+	expenseRepo *repository.ExpenseRepository
+	goalRepo    *repository.GoalRepository
 
 	// Services
 	financeService *services.FinanceService
@@ -103,12 +103,14 @@ func (s *ServiceProvider) DBClient(ctx context.Context) db.Client {
 		if err != nil {
 			log.Fatalf("failed to get db client: %v", err)
 		}
-		err = cl.DB().Ping(ctx)
+		err = cl.DB().PingContext(ctx)
 		if err != nil {
 			log.Fatalf("ping error: %v", err)
 		}
 
-		closer.Add(cl.Close)
+		closer.Add(func() error {
+			return cl.Close()
+		})
 		s.dbClient = cl
 	}
 	return s.dbClient
@@ -118,28 +120,28 @@ func (s *ServiceProvider) SQLDB(ctx context.Context) *sql.DB {
 	return s.DBClient(ctx).DB()
 }
 
-func (s *ServiceProvider) UserRepository(ctx context.Context) repository.UserRepository {
+func (s *ServiceProvider) UserRepository(ctx context.Context) *repository.UserRepository {
 	if s.userRepo == nil {
 		s.userRepo = repository.NewUserRepository(s.SQLDB(ctx))
 	}
 	return s.userRepo
 }
 
-func (s *ServiceProvider) IncomeRepository(ctx context.Context) repository.IncomeRepository {
+func (s *ServiceProvider) IncomeRepository(ctx context.Context) *repository.IncomeRepository {
 	if s.incomeRepo == nil {
 		s.incomeRepo = repository.NewIncomeRepository(s.SQLDB(ctx))
 	}
 	return s.incomeRepo
 }
 
-func (s *ServiceProvider) ExpenseRepository(ctx context.Context) repository.ExpenseRepository {
+func (s *ServiceProvider) ExpenseRepository(ctx context.Context) *repository.ExpenseRepository {
 	if s.expenseRepo == nil {
 		s.expenseRepo = repository.NewExpenseRepository(s.SQLDB(ctx))
 	}
 	return s.expenseRepo
 }
 
-func (s *ServiceProvider) GoalRepository(ctx context.Context) repository.GoalRepository {
+func (s *ServiceProvider) GoalRepository(ctx context.Context) *repository.GoalRepository {
 	if s.goalRepo == nil {
 		s.goalRepo = repository.NewGoalRepository(s.SQLDB(ctx))
 	}
@@ -226,4 +228,3 @@ func (s *ServiceProvider) BotHandler(ctx context.Context) *handlers.BotHandler {
 	}
 	return s.botHandler
 }
-

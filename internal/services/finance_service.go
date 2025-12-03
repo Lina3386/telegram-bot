@@ -11,18 +11,13 @@ import (
 )
 
 type FinanceService struct {
-	userRepo    repository.UserRepository
-	incomeRepo  repository.IncomeRepository
-	expenseRepo repository.ExpenseRepository
-	goalRepo    repository.GoalRepository
+	userRepo    *repository.UserRepository
+	incomeRepo  *repository.IncomeRepository
+	expenseRepo *repository.ExpenseRepository
+	goalRepo    *repository.GoalRepository
 }
 
-func NewFinanceService(
-	userRepo repository.UserRepository,
-	incomeRepo repository.IncomeRepository,
-	expenseRepo repository.ExpenseRepository,
-	goalRepo repository.GoalRepository,
-) *FinanceService {
+func NewFinanceService(userRepo *repository.UserRepository, incomeRepo *repository.IncomeRepository, expenseRepo *repository.ExpenseRepository, goalRepo *repository.GoalRepository) *FinanceService {
 	return &FinanceService{
 		userRepo:    userRepo,
 		incomeRepo:  incomeRepo,

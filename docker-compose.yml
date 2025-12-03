@@ -12,7 +12,7 @@ services:
       - ./migrations/schema.sql:/docker-entrypoint-initdb.d/schema.sql
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "5433:5432"
+      - "5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
       interval: 10s

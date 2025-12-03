@@ -4,7 +4,6 @@ import (
 	"errors"
 	"github.com/Lina3386/telegram-bot/internal/config"
 	"os"
-	"strconv"
 )
 
 const (
@@ -38,4 +37,3 @@ func (cfg *botConfig) Token() string {
 func (cfg *botConfig) Debug() bool {
 	return cfg.debug
 }
-

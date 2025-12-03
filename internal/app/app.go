@@ -87,22 +87,19 @@ func (a *App) initScheduler(ctx context.Context) error {
 }
 
 func (a *App) runTelegramBot() error {
-	log.Println("🤖 Telegram bot is starting...")
+	log.Println("Telegram bot is starting...")
 
-	// ✅ Настраиваем обновления
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
 
 	updates := a.bot.GetUpdatesChan(u)
-	log.Println("🤖 Bot is running... (Press Ctrl+C to stop)")
+	log.Println("Bot is running... (Press Ctrl+C to stop)")
 
-	// ✅ Обработчик сигналов для корректного завершения
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
 	botHandler := a.serviceProvider.BotHandler(context.Background())
 
-	// ✅ ОСНОВНОЙ ЦИКЛ ОБРАБОТКИ
 	for {
 		select {
 		case <-sigChan:
@@ -110,11 +107,9 @@ func (a *App) runTelegramBot() error {
 			return nil
 
 		case update := <-updates:
-			// ✅ Обработка команд
 			if update.Message != nil {
-				log.Printf("📨 Message from %d: %s", update.Message.From.ID, update.Message.Text)
+				log.Printf("Message from %d: %s", update.Message.From.ID, update.Message.Text)
 
-				// ✅ Обработка команд
 				if update.Message.IsCommand() {
 					switch update.Message.Command() {
 					case "start":
@@ -127,12 +122,9 @@ func (a *App) runTelegramBot() error {
 						botHandler.HandleUnknownCommand(update.Message)
 					}
 				} else {
-					// ✅ Обработка текстовых сообщений
 					botHandler.HandleTextMessage(update.Message)
 				}
 			}
-
-			// ✅ Обработка нажатия кнопок (callback queries)
 			if update.CallbackQuery != nil {
 				log.Printf("🔘 Callback from %d: %s", update.CallbackQuery.From.ID, update.CallbackQuery.Data)
 				botHandler.HandleCallback(update.CallbackQuery)
@@ -140,4 +132,3 @@ func (a *App) runTelegramBot() error {
 		}
 	}
 }
-

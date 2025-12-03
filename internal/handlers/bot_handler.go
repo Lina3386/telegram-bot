@@ -549,7 +549,7 @@ func (h *BotHandler) HandleCallback(query *tgbotapi.CallbackQuery) {
 			statusText = "🎉 Цель достигнута!"
 		}
 
-		ctx := context.Background()
+		ctx = context.Background()
 		_ = h.chatClient.LogFinancialOperation(ctx, userID, "GOAL_CONTRIBUTION", fmt.Sprintf("%s: +%d₽ (total: %d₽)", goal.GoalName, amount, goal.CurrentAmount))
 
 		h.answerCallback(query.ID, statusText)

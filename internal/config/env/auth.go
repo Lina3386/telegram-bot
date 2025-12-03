@@ -1,7 +1,6 @@
 package env
 
 import (
-	"errors"
 	"github.com/Lina3386/telegram-bot/internal/config"
 	"net"
 	"os"
@@ -37,4 +36,3 @@ func NewAuthConfig() (config.AuthConfig, error) {
 func (cfg *authConfig) Address() string {
 	return net.JoinHostPort(cfg.host, cfg.port)
 }
-
