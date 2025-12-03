@@ -51,70 +51,91 @@ func (a *App) initDeps(ctx context.Context) error {
 		a.initScheduler,
 	}
 
-	for _, f := range inits {
+	for i, f := range inits {
+		log.Printf("Initializing step %d/%d...", i+1, len(inits))
 		err := f(ctx)
 		if err != nil {
+			log.Printf("Failed at step %d: %v", i+1, err)
 			return err
 		}
 	}
+	log.Println("✅ All dependencies initialized")
 	return nil
 }
 
 func (a *App) initConfig(context.Context) error {
 	err := config.Load(configPath)
 	if err != nil {
-		return err
+		log.Printf("⚠️  Config file not found, using environment variables: %v", err)
+		// Не возвращаем ошибку, так как переменные могут быть в окружении
 	}
+	log.Println("✅ Config loaded")
 	return nil
 }
 
 func (a *App) initServiceProvider(context.Context) error {
 	a.serviceProvider = NewServiceProvider()
+	log.Println("✅ Service provider created")
 	return nil
 }
 
 func (a *App) initTelegramBot(ctx context.Context) error {
 	bot, err := a.serviceProvider.TelegramBot(ctx)
 	if err != nil {
+		log.Printf("❌ Failed to initialize bot: %v", err)
 		return err
 	}
 	a.bot = bot
+	log.Println("✅ Telegram bot initialized")
 	return nil
 }
 
 func (a *App) initScheduler(ctx context.Context) error {
-	return a.serviceProvider.Scheduler(ctx).Start(ctx)
+	// Запускаем scheduler в горутине, чтобы не блокировать инициализацию
+	scheduler := a.serviceProvider.Scheduler(ctx)
+	go func() {
+		scheduler.Start(ctx)
+	}()
+	log.Println("✅ Scheduler started in background")
+	return nil
 }
 
 func (a *App) runTelegramBot() error {
 	log.Println("🤖 Telegram bot is starting...")
 
+	// ✅ Проверяем, что бот доступен
+	_, err := a.bot.GetMe()
+	if err != nil {
+		log.Printf("❌ Failed to get bot info: %v", err)
+		return err
+	}
+	log.Println("✅ Bot is accessible via Telegram API")
+
 	// ✅ Настраиваем обновления
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
 
+	log.Println("📡 Setting up updates channel...")
 	updates := a.bot.GetUpdatesChan(u)
-	log.Println("🤖 Bot is running... (Press Ctrl+C to stop)")
+	log.Println("✅ Bot is running and listening for updates... (Press Ctrl+C to stop)")
+	log.Println("💡 Try sending /start to the bot to test")
 
-	// ✅ Обработчик сигналов для корректного завершения
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
 	botHandler := a.serviceProvider.BotHandler(context.Background())
 
-	// ✅ ОСНОВНОЙ ЦИКЛ ОБРАБОТКИ
 	for {
 		select {
 		case <-sigChan:
-			log.Println("\n⏹️  Shutting down gracefully...")
+			log.Println("\nShutting down gracefully...")
 			return nil
 
 		case update := <-updates:
-			// ✅ Обработка команд
+			// ✅ Обработка сообщений
 			if update.Message != nil {
 				log.Printf("📨 Message from %d: %s", update.Message.From.ID, update.Message.Text)
 
-				// ✅ Обработка команд
 				if update.Message.IsCommand() {
 					switch update.Message.Command() {
 					case "start":
@@ -127,12 +148,11 @@ func (a *App) runTelegramBot() error {
 						botHandler.HandleUnknownCommand(update.Message)
 					}
 				} else {
-					// ✅ Обработка текстовых сообщений
 					botHandler.HandleTextMessage(update.Message)
 				}
 			}
 
-			// ✅ Обработка нажатия кнопок (callback queries)
+			// ✅ Обработка callback queries
 			if update.CallbackQuery != nil {
 				log.Printf("🔘 Callback from %d: %s", update.CallbackQuery.From.ID, update.CallbackQuery.Data)
 				botHandler.HandleCallback(update.CallbackQuery)
@@ -140,4 +160,5 @@ func (a *App) runTelegramBot() error {
 		}
 	}
 }
+
 

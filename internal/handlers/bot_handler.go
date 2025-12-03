@@ -38,8 +38,6 @@ func NewBotHandler(
 	}
 }
 
-// ============ ОБРАБОТЧИКИ КОМАНД ============
-
 func (h *BotHandler) HandleStart(message *tgbotapi.Message) {
 	userID := message.From.ID
 	username := message.From.UserName
@@ -50,27 +48,22 @@ func (h *BotHandler) HandleStart(message *tgbotapi.Message) {
 
 	ctx := context.Background()
 	log.Printf("User %d (%s) started the bot", userID, username)
-
-	// ✅ Регистрируем пользователя через Auth сервис
 	token, err := h.authClient.RegisterTelegramUser(ctx, userID, username)
 	if err != nil {
 		log.Printf("Failed to register user: %v", err)
-		h.sendMessage(chatID, "❌ Ошибка регистрации. Попробуйте позже.")
+		h.sendMessage(chatID, "Ошибка регистрации. Попробуйте позже.")
 		return
 	}
 
-	// ✅ Логируем регистрацию в chat service
 	_ = h.chatClient.LogFinancialOperation(ctx, userID, "USER_REGISTERED", fmt.Sprintf("User %s registered", username))
 
-	// ✅ Создаем пользователя в БД
 	_, err = h.financeService.CreateUser(ctx, userID, username, token)
 	if err != nil {
 		log.Printf("Failed to create user in DB: %v", err)
-		h.sendMessage(chatID, "❌ Ошибка при сохранении данных.")
+		h.sendMessage(chatID, "Ошибка при сохранении данных.")
 		return
 	}
 
-	// ✅ Очищаем состояние
 	h.stateManager.ClearState(userID)
 
 	msg := fmt.Sprintf("👋 Добро пожаловать, %s!\n\n"+
@@ -117,8 +110,6 @@ func (h *BotHandler) HandleUnknownCommand(message *tgbotapi.Message) {
 	h.sendMessage(message.Chat.ID, "❓ Неизвестная команда.\n\nИспользуйте /help для справки")
 }
 
-// ============ ОБРАБОТЧИК ТЕКСТОВЫХ СООБЩЕНИЙ ============
-
 func (h *BotHandler) HandleTextMessage(message *tgbotapi.Message) {
 	userID := message.From.ID
 	chatID := message.Chat.ID
@@ -127,7 +118,6 @@ func (h *BotHandler) HandleTextMessage(message *tgbotapi.Message) {
 
 	currentState := h.stateManager.GetState(userID)
 
-	// ✅ Обработка текстовых меню
 	switch text {
 	case "➕ Добавить доход":
 		h.stateManager.SetState(userID, state.StateAddingIncome)
@@ -156,7 +146,6 @@ func (h *BotHandler) HandleTextMessage(message *tgbotapi.Message) {
 		return
 	}
 
-	// ✅ Обработка состояний диалога
 	switch currentState {
 	case state.StateAddingIncome:
 		h.stateManager.SetTempData(userID, "income_name", text)
@@ -179,8 +168,6 @@ func (h *BotHandler) HandleTextMessage(message *tgbotapi.Message) {
 			h.sendMessage(chatID, "❌ Введите число от 1 до 31")
 			return
 		}
-
-		// ✅ Сохраняем доход в БД
 		incomeName := h.stateManager.GetTempData(userID, "income_name")
 		incomeAmount, _ := strconv.ParseInt(h.stateManager.GetTempData(userID, "income_amount"), 10, 64)
 
@@ -196,7 +183,6 @@ func (h *BotHandler) HandleTextMessage(message *tgbotapi.Message) {
 			return
 		}
 
-		// ✅ Логируем операцию в chat service
 		_ = h.chatClient.LogFinancialOperation(ctx, userID, "INCOME_ADDED", fmt.Sprintf("%s: %d₽ (day %d)", incomeName, incomeAmount, day))
 
 		h.stateManager.ClearState(userID)
@@ -220,7 +206,6 @@ func (h *BotHandler) HandleTextMessage(message *tgbotapi.Message) {
 
 		expenseName := h.stateManager.GetTempData(userID, "expense_name")
 
-		// ✅ Сохраняем расход в БД
 		_, err = h.financeService.CreateExpense(ctx, userID, expenseName, amount)
 		if err != nil {
 			log.Printf("Failed to create expense: %v", err)
@@ -228,7 +213,6 @@ func (h *BotHandler) HandleTextMessage(message *tgbotapi.Message) {
 			return
 		}
 
-		// ✅ Логируем операцию в chat service
 		_ = h.chatClient.LogFinancialOperation(ctx, userID, "EXPENSE_ADDED", fmt.Sprintf("%s: %d₽", expenseName, amount))
 
 		h.stateManager.ClearState(userID)
@@ -272,11 +256,9 @@ func (h *BotHandler) HandleTextMessage(message *tgbotapi.Message) {
 			return
 		}
 
-		// ✅ Логируем операцию в chat service
 		priorityText := []string{"", "Высший", "Средний", "Низкий"}[priority]
 		_ = h.chatClient.LogFinancialOperation(ctx, userID, "GOAL_CREATED", fmt.Sprintf("%s: %d₽ (priority: %s)", goalName, targetAmount, priorityText))
 
-		// ✅ Рассчитываем время до цели
 		timeToGoal := h.calculateTimeToGoal(targetAmount, goal.MonthlyContrib, 0)
 
 		h.stateManager.ClearState(userID)
@@ -310,7 +292,6 @@ func (h *BotHandler) HandleTextMessage(message *tgbotapi.Message) {
 			return
 		}
 
-		// ✅ Логируем операцию в chat service
 		_ = h.chatClient.LogFinancialOperation(ctx, userID, "GOAL_WITHDRAWAL", fmt.Sprintf("%s: -%d₽ (remaining: %d₽)", goal.GoalName, amount, goal.CurrentAmount))
 
 		progress := int64(0)
@@ -327,14 +308,13 @@ func (h *BotHandler) HandleTextMessage(message *tgbotapi.Message) {
 		)
 
 	default:
-		// ✅ Предлагаем меню если нет активного состояния
+
 		if currentState == state.StateIdle {
 			h.sendMessageWithKeyboard(chatID, "Используйте меню ниже:", h.mainMenu())
 		}
 	}
 }
 
-// ============ ОБРАБОТЧИКИ МЕНЮ ============
 
 func (h *BotHandler) handleShowIncomes(message *tgbotapi.Message) {
 	userID := message.From.ID
@@ -458,7 +438,7 @@ func (h *BotHandler) handleShowStats(message *tgbotapi.Message) {
 		log.Printf("Failed to calculate available for savings: %v", err)
 	}
 
-	// ✅ Получаем цели для статистики
+
 	goals, err := h.financeService.GetUserActiveGoalsByTelegramID(ctx, userID)
 	if err != nil {
 		log.Printf("Failed to get goals: %v", err)
@@ -511,7 +491,6 @@ func (h *BotHandler) handleShowStats(message *tgbotapi.Message) {
 	h.sendMessageWithKeyboard(chatID, text, h.mainMenu())
 }
 
-// ============ ОБРАБОТЧИК КНОПОК (CallbackQuery) ============
 
 func (h *BotHandler) HandleCallback(query *tgbotapi.CallbackQuery) {
 	userID := query.From.ID
@@ -520,7 +499,7 @@ func (h *BotHandler) HandleCallback(query *tgbotapi.CallbackQuery) {
 
 	log.Printf("Callback from user %d: %s", userID, callbackData)
 
-	// ✅ Разбираем callback данные
+	
 	parts := strings.Split(callbackData, "_")
 	if len(parts) < 2 {
 		h.answerCallback(query.ID, "❌ Неизвестное действие")
@@ -546,7 +525,6 @@ func (h *BotHandler) HandleCallback(query *tgbotapi.CallbackQuery) {
 		h.answerCallback(query.ID, "✅ Введите данные")
 
 	case "add_contribution":
-		// ✅ Формат: add_contribution_{goalID}_{amount}
 		if len(parts) < 3 {
 			h.answerCallback(query.ID, "❌ Ошибка формата")
 			return
@@ -580,7 +558,6 @@ func (h *BotHandler) HandleCallback(query *tgbotapi.CallbackQuery) {
 			statusText = "🎉 Цель достигнута!"
 		}
 
-		// ✅ Логируем операцию в chat service
 		ctx := context.Background()
 		_ = h.chatClient.LogFinancialOperation(ctx, userID, "GOAL_CONTRIBUTION", fmt.Sprintf("%s: +%d₽ (total: %d₽)", goal.GoalName, amount, goal.CurrentAmount))
 
@@ -591,7 +568,6 @@ func (h *BotHandler) HandleCallback(query *tgbotapi.CallbackQuery) {
 		))
 
 	case "withdraw":
-		// ✅ Формат: withdraw_{goalID}
 		if len(parts) < 2 {
 			h.answerCallback(query.ID, "❌ Ошибка формата")
 			return
@@ -615,7 +591,6 @@ func (h *BotHandler) HandleCallback(query *tgbotapi.CallbackQuery) {
 			return
 		}
 
-		// ✅ Сохраняем goalID для следующего шага
 		h.stateManager.SetTempData(userID, "withdraw_goal_id", parts[1])
 		h.stateManager.SetState(userID, state.StateWithdrawingFromGoal)
 		h.answerCallback(query.ID, "✅ Введите сумму для вычета")
@@ -629,7 +604,6 @@ func (h *BotHandler) HandleCallback(query *tgbotapi.CallbackQuery) {
 	}
 }
 
-// ============ ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ ============
 
 func (h *BotHandler) mainMenu() tgbotapi.ReplyKeyboardMarkup {
 	return tgbotapi.NewReplyKeyboard(
@@ -647,7 +621,6 @@ func (h *BotHandler) mainMenu() tgbotapi.ReplyKeyboardMarkup {
 	)
 }
 
-// ✅ Исправлено: обработка ошибок при отправке
 func (h *BotHandler) sendMessage(chatID int64, text string) error {
 	msg := tgbotapi.NewMessage(chatID, text)
 	_, err := h.bot.Send(msg)
@@ -658,7 +631,6 @@ func (h *BotHandler) sendMessage(chatID int64, text string) error {
 	return nil
 }
 
-// ✅ Исправлено: обработка ошибок при отправке с клавиатурой
 func (h *BotHandler) sendMessageWithKeyboard(
 	chatID int64,
 	text string,
@@ -674,13 +646,11 @@ func (h *BotHandler) sendMessageWithKeyboard(
 	return nil
 }
 
-// ✅ Обработчик ответа на callback
 func (h *BotHandler) answerCallback(callbackQueryID, text string) {
 	callback := tgbotapi.NewCallback(callbackQueryID, text)
 	h.bot.Request(callback)
 }
 
-// ✅ calculateTimeToGoal рассчитывает время до достижения цели
 func (h *BotHandler) calculateTimeToGoal(targetAmount, monthlyContrib, currentAmount int64) string {
 	remaining := targetAmount - currentAmount
 	if remaining <= 0 {

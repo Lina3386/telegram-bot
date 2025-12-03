@@ -99,14 +99,16 @@ func (s *ServiceProvider) ChatConfig() config.ChatConfig {
 
 func (s *ServiceProvider) DBClient(ctx context.Context) db.Client {
 	if s.dbClient == nil {
+		log.Println("📦 Connecting to database...")
 		cl, err := pg.New(ctx, s.PGConfig().DSN())
 		if err != nil {
-			log.Fatalf("failed to get db client: %v", err)
+			log.Fatalf("❌ failed to get db client: %v", err)
 		}
 		err = cl.DB().Ping(ctx)
 		if err != nil {
-			log.Fatalf("ping error: %v", err)
+			log.Fatalf("❌ ping error: %v", err)
 		}
+		log.Println("✅ Database connected")
 
 		closer.Add(cl.Close)
 		s.dbClient = cl
@@ -162,8 +164,7 @@ func (s *ServiceProvider) AuthClient(ctx context.Context) *client.AuthClient {
 	if s.authClient == nil {
 		authClient, err := client.NewAuthClient(s.AuthConfig().Address())
 		if err != nil {
-			log.Printf("⚠️  Failed to connect to auth service: %v (will use mock)", err)
-			// Не падаем, используем mock
+			log.Printf("Failed to connect to auth service: %v (will use mock)", err)
 		}
 		s.authClient = authClient
 		closer.Add(s.authClient.Close)
@@ -175,8 +176,7 @@ func (s *ServiceProvider) ChatClient(ctx context.Context) *client.ChatClient {
 	if s.chatClient == nil {
 		chatClient, err := client.NewChatClient(s.ChatConfig().Address())
 		if err != nil {
-			log.Printf("⚠️  Failed to connect to chat service: %v (will use mock)", err)
-			// Не падаем, используем mock
+			log.Printf("Failed to connect to chat service: %v (will use mock)", err)
 		}
 		s.chatClient = chatClient
 		closer.Add(s.chatClient.Close)
@@ -195,7 +195,7 @@ func (s *ServiceProvider) TelegramBot(ctx context.Context) (*tgbotapi.BotAPI, er
 	if s.bot == nil {
 		token := s.BotConfig().Token()
 		if token == "" {
-			log.Fatal("❌ TELEGRAM_BOT_TOKEN not set")
+			log.Fatal("TELEGRAM_BOT_TOKEN not set")
 		}
 
 		bot, err := tgbotapi.NewBotAPI(token)
@@ -203,7 +203,7 @@ func (s *ServiceProvider) TelegramBot(ctx context.Context) (*tgbotapi.BotAPI, er
 			return nil, err
 		}
 		bot.Debug = s.BotConfig().Debug()
-		log.Printf("✅ Bot authorized: @%s\n", bot.Self.UserName)
+		log.Printf("Bot authorized: @%s\n", bot.Self.UserName)
 		s.bot = bot
 	}
 	return s.bot, nil
@@ -216,14 +216,21 @@ func (s *ServiceProvider) Scheduler(ctx context.Context) *services.Scheduler {
 
 func (s *ServiceProvider) BotHandler(ctx context.Context) *handlers.BotHandler {
 	if s.botHandler == nil {
+		// ✅ Убеждаемся, что бот инициализирован
+		bot, err := s.TelegramBot(ctx)
+		if err != nil {
+			log.Printf("⚠️  Warning: bot not initialized, handler may not work: %v", err)
+		}
 		s.botHandler = handlers.NewBotHandler(
-			s.bot,
+			bot,
 			s.FinanceService(ctx),
 			s.AuthClient(ctx),
 			s.ChatClient(ctx),
 			s.StateManager(),
 		)
+		log.Println("✅ Bot handler created")
 	}
 	return s.botHandler
 }
+
 

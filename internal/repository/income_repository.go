@@ -115,8 +115,6 @@ func (r *IncomeRepository) DeleteIncome(ctx context.Context, incomeID int64) err
 	return err
 }
 
-// ✅ GetIncomesByPayDate получает доходы с определенной датой получки
-// Возвращает доходы с telegram_id пользователя для уведомлений
 func (r *IncomeRepository) GetIncomesByPayDate(ctx context.Context, payDate time.Time) ([]models.Income, error) {
 	startOfDay := time.Date(payDate.Year(), payDate.Month(), payDate.Day(), 0, 0, 0, 0, payDate.Location())
 	endOfDay := startOfDay.Add(24 * time.Hour)
@@ -152,7 +150,6 @@ func (r *IncomeRepository) GetIncomesByPayDate(ctx context.Context, payDate time
 		if err != nil {
 			return nil, err
 		}
-		// ✅ Сохраняем telegram_id в UserID для удобства в scheduler
 		income.UserID = telegramID
 		incomes = append(incomes, income)
 	}
@@ -160,7 +157,6 @@ func (r *IncomeRepository) GetIncomesByPayDate(ctx context.Context, payDate time
 	return incomes, rows.Err()
 }
 
-// ✅ UpdateIncomeNextPayDate обновляет дату следующей получки
 func (r *IncomeRepository) UpdateIncomeNextPayDate(ctx context.Context, incomeID int64, nextPayDate time.Time) error {
 	_, err := r.db.ExecContext(
 		ctx,

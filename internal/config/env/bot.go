@@ -39,3 +39,4 @@ func (cfg *botConfig) Debug() bool {
 	return cfg.debug
 }
 
+

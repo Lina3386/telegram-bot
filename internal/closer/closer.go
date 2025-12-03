@@ -26,6 +26,7 @@ func CloseAll() {
 }
 
 func Wait() {
-	// Можно добавить wait group если нужно
+	
 }
+
 
