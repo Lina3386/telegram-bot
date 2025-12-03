@@ -26,7 +26,6 @@ func NewFinanceService(userRepo *repository.UserRepository, incomeRepo *reposito
 	}
 }
 
-// создает нового пользователя
 func (s *FinanceService) CreateUser(ctx context.Context, telegramID int64, username string, authToken string) (*models.User, error) {
 	user, err := s.userRepo.CreateUser(ctx, telegramID, username, authToken)
 	if err != nil {
@@ -37,12 +36,10 @@ func (s *FinanceService) CreateUser(ctx context.Context, telegramID int64, usern
 	return user, nil
 }
 
-// получает пользователя по Telegram ID
 func (s *FinanceService) GetUserByTelegramID(ctx context.Context, telegramID int64) (*models.User, error) {
 	return s.userRepo.GetUserByTelegramID(ctx, telegramID)
 }
 
-// создает новый источник дохода
 func (s *FinanceService) CreateIncome(
 	ctx context.Context,
 	userID int64,
@@ -60,12 +57,10 @@ func (s *FinanceService) CreateIncome(
 	return income, nil
 }
 
-// получает все доходы пользователя
 func (s *FinanceService) GetUserIncomes(ctx context.Context, userID int64) ([]models.Income, error) {
 	return s.incomeRepo.GetUserIncomes(ctx, userID)
 }
 
-// считает общий доход
 func (s *FinanceService) CalculateTotalIncome(ctx context.Context, userID int64) (int64, error) {
 	incomes, err := s.incomeRepo.GetUserIncomes(ctx, userID)
 	if err != nil {
@@ -97,12 +92,10 @@ func (s *FinanceService) CreateExpense(ctx context.Context, userID int64, name s
 	return expense, nil
 }
 
-// получает все расходы пользователя
 func (s *FinanceService) GetUserExpenses(ctx context.Context, userID int64) ([]models.Expense, error) {
 	return s.expenseRepo.GetUserExpenses(ctx, userID)
 }
 
-// считает сумму всех расходов
 func (s *FinanceService) CalculateTotalExpense(ctx context.Context, userID int64) (int64, error) {
 	expenses, err := s.expenseRepo.GetUserExpenses(ctx, userID)
 	if err != nil {
@@ -141,7 +134,6 @@ func (s *FinanceService) CreateGoal(ctx context.Context, userID int64, goalName 
 
 	targetDate := time.Now().AddDate(0, int(monthsNeeded), 0)
 
-	// Создаем цель
 	goal, err := s.goalRepo.CreateGoal(
 		ctx,
 		userID,

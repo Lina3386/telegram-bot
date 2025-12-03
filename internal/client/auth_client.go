@@ -19,30 +19,23 @@ func NewAuthClient(addr string) (*AuthClient, error) {
 		addr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
-	available := err == nil
-
 	if err != nil {
-		log.Printf("Auth service connection failed: %v (will use offline mode)", err)
-		return &AuthClient{
-			conn:      nil,
-			available: false,
-		}, nil
+		log.Printf("Auth service connection warning: %v (service may not be running)", err)
+	} else {
+		log.Printf("Connected to auth service at %s", addr)
 	}
-
-	log.Printf("Connected to auth service at %s", addr)
 	return &AuthClient{
-		conn:      conn,
-		available: available,
+		conn: conn,
 	}, nil
 }
 
 func (c *AuthClient) RegisterTelegramUser(ctx context.Context, telegramID int64, username string) (string, error) {
 	if c.conn == nil {
-		log.Printf("Using mock auth token (auth service not connected)")
+		log.Printf("⚠️  Using mock auth token (auth service not connected)")
 		return fmt.Sprintf("mock_token_%d", telegramID), nil
 	}
 
-	log.Printf("Registering telegram user %d (%s) via auth service", telegramID, username)
+	log.Printf("📝 Registering telegram user %d (%s) via auth service", telegramID, username)
 	return fmt.Sprintf("tg_token_%d_%d", telegramID, ctx.Value("timestamp")), nil
 }
 

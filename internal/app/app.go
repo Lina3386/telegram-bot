@@ -51,49 +51,73 @@ func (a *App) initDeps(ctx context.Context) error {
 		a.initScheduler,
 	}
 
-	for _, f := range inits {
+	for i, f := range inits {
+		log.Printf("Initializing step %d/%d...", i+1, len(inits))
 		err := f(ctx)
 		if err != nil {
+			log.Printf("Failed at step %d: %v", i+1, err)
 			return err
 		}
 	}
+	log.Println("✅ All dependencies initialized")
 	return nil
 }
 
 func (a *App) initConfig(context.Context) error {
 	err := config.Load(configPath)
 	if err != nil {
-		return err
+		log.Printf("⚠️  Config file not found, using environment variables: %v", err)
+		// Не возвращаем ошибку, так как переменные могут быть в окружении
 	}
+	log.Println("✅ Config loaded")
 	return nil
 }
 
 func (a *App) initServiceProvider(context.Context) error {
 	a.serviceProvider = NewServiceProvider()
+	log.Println("✅ Service provider created")
 	return nil
 }
 
 func (a *App) initTelegramBot(ctx context.Context) error {
 	bot, err := a.serviceProvider.TelegramBot(ctx)
 	if err != nil {
+		log.Printf("❌ Failed to initialize bot: %v", err)
 		return err
 	}
 	a.bot = bot
+	log.Println("✅ Telegram bot initialized")
 	return nil
 }
 
 func (a *App) initScheduler(ctx context.Context) error {
-	return a.serviceProvider.Scheduler(ctx).Start(ctx)
+	// Запускаем scheduler в горутине, чтобы не блокировать инициализацию
+	scheduler := a.serviceProvider.Scheduler(ctx)
+	go func() {
+		scheduler.Start(ctx)
+	}()
+	log.Println("✅ Scheduler started in background")
+	return nil
 }
 
 func (a *App) runTelegramBot() error {
 	log.Println("Telegram bot is starting...")
 
+	_, err := a.bot.GetMe()
+	if err != nil {
+		log.Printf("❌ Failed to get bot info: %v", err)
+		return err
+	}
+	log.Println("✅ Bot is accessible via Telegram API")
+
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
 
+	log.Println("📡 Setting up updates channel...")
 	updates := a.bot.GetUpdatesChan(u)
-	log.Println("Bot is running... (Press Ctrl+C to stop)")
+
+	log.Println("Bot is running and listening for updates... (Press Ctrl+C to stop)")
+	log.Println("Try sending /start to the bot to test")
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
@@ -103,7 +127,7 @@ func (a *App) runTelegramBot() error {
 	for {
 		select {
 		case <-sigChan:
-			log.Println("\n⏹️  Shutting down gracefully...")
+			log.Println("\nShutting down gracefully...")
 			return nil
 
 		case update := <-updates:

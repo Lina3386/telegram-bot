@@ -24,4 +24,6 @@ func CloseAll() error {
 	return nil
 }
 
-func Wait() {}
+func Wait() {
+
+}

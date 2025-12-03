@@ -19,20 +19,14 @@ func NewChatClient(addr string) (*ChatClient, error) {
 		addr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
-	available := err == nil
-
 	if err != nil {
-		log.Printf("Chat service connection failed: %v (will use offline mode)", err)
-		return &ChatClient{
-			conn:      nil,
-			available: false,
-		}, nil
+		log.Printf("Chat service connection warning: %v (service may not be running)", err)
+	} else {
+		log.Printf("Connected to chat service at %s", addr)
 	}
 
-	log.Printf("Connected to chat service at %s", addr)
 	return &ChatClient{
-		conn:      conn,
-		available: available,
+		conn: conn,
 	}, nil
 }
 
@@ -65,8 +59,4 @@ func (c *ChatClient) Close() error {
 		return c.conn.Close()
 	}
 	return nil
-}
-
-func (c *ChatClient) IsAvailable() bool {
-	return c.available && c.conn != nil
 }

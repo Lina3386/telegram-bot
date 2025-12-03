@@ -7,3 +7,4 @@ CREATE INDEX IF NOT EXISTS idx_goals_priority ON savings_goals(priority);
 DROP INDEX IF EXISTS idx_goals_priority;
 ALTER TABLE savings_goals DROP COLUMN IF EXISTS priority;
 
+

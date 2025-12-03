@@ -55,13 +55,16 @@ func (h *BotHandler) HandleStart(message *tgbotapi.Message) {
 		h.sendMessage(chatID, "Ошибка регистрации. Попробуйте позже.")
 		return
 	}
+
 	_ = h.chatClient.LogFinancialOperation(ctx, userID, "USER_REGISTERED", fmt.Sprintf("User %s registered", username))
+
 	_, err = h.financeService.CreateUser(ctx, userID, username, token)
 	if err != nil {
 		log.Printf("Failed to create user in DB: %v", err)
 		h.sendMessage(chatID, "Ошибка при сохранении данных.")
 		return
 	}
+
 	h.stateManager.ClearState(userID)
 
 	msg := fmt.Sprintf("👋 Добро пожаловать, %s!\n\n"+
@@ -256,6 +259,7 @@ func (h *BotHandler) HandleTextMessage(message *tgbotapi.Message) {
 
 		priorityText := []string{"", "Высший", "Средний", "Низкий"}[priority]
 		_ = h.chatClient.LogFinancialOperation(ctx, userID, "GOAL_CREATED", fmt.Sprintf("%s: %d₽ (priority: %s)", goalName, targetAmount, priorityText))
+
 		timeToGoal := h.calculateTimeToGoal(targetAmount, goal.MonthlyContrib, 0)
 
 		h.stateManager.ClearState(userID)
@@ -305,6 +309,7 @@ func (h *BotHandler) HandleTextMessage(message *tgbotapi.Message) {
 		)
 
 	default:
+
 		if currentState == state.StateIdle {
 			h.sendMessageWithKeyboard(chatID, "Используйте меню ниже:", h.mainMenu())
 		}
@@ -491,6 +496,7 @@ func (h *BotHandler) HandleCallback(query *tgbotapi.CallbackQuery) {
 	callbackData := query.Data
 
 	log.Printf("Callback from user %d: %s", userID, callbackData)
+
 	parts := strings.Split(callbackData, "_")
 	if len(parts) < 2 {
 		h.answerCallback(query.ID, "❌ Неизвестное действие")
