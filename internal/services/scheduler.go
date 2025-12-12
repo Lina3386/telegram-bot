@@ -142,7 +142,7 @@ func (s *Scheduler) sendPaydayNotification(ctx context.Context, income models.In
 	if len(goals) == 0 {
 		msg := fmt.Sprintf(
 			"💰 Сегодня: %s\n\n"+
-				"🎯 День получки: %s\n"+
+				"🎯 День дохода: %s\n"+
 				"Сумма: %d₽\n\n"+
 				"ℹ️ У вас нет активных целей для накопления",
 			dateStr, income.Name, income.Amount,

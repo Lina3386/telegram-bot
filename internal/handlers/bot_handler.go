@@ -149,16 +149,32 @@ func (h *BotHandler) handleTestPaydayCommand(message *tgbotapi.Message) {
 
 	args := strings.Fields(message.Text)
 	if len(args) < 2 {
-		h.sendMessage(chatID, "❌ Использование: /testpayday [income_id]\n\nСначала посмотрите список своих доходов")
+		h.sendMessage(chatID, "❌ Использование: /testpayday [порядковый_номер_дохода]\n\nСначала посмотрите список своих доходов (номер 1,2,3...)")
 		return
 	}
 
-	incomeIDStr := args[1]
-	incomeID, err := strconv.ParseInt(incomeIDStr, 10, 64)
-	if err != nil {
-		h.sendMessage(chatID, "❌ ID дохода должен быть числом")
+	incomeIndexStr := args[1]
+	incomeIndex, err := strconv.Atoi(incomeIndexStr)
+	if err != nil || incomeIndex < 1 {
+		h.sendMessage(chatID, "❌ Номер дохода должен быть числом от 1")
 		return
 	}
+
+	// список доходов пользователя
+	incomes, err := h.financeService.GetUserIncomes(ctx, userID)
+	if err != nil {
+		h.sendMessage(chatID, "❌ Ошибка при загрузке доходов")
+		return
+	}
+
+	if len(incomes) < incomeIndex {
+		h.sendMessage(chatID, fmt.Sprintf("❌ Номер дохода должен быть от 1 до %d", len(incomes)))
+		return
+	}
+
+	// доход по порядковому номеру
+	income := incomes[incomeIndex-1]
+	incomeID := income.ID
 
 	err = h.financeService.TestPaydayNotification(h.bot, ctx, userID, incomeID)
 	if err != nil {
@@ -508,7 +524,7 @@ func (h *BotHandler) handleShowIncomes(message *tgbotapi.Message) {
 			totalIncome = 0
 		}
 
-		for _, income := range incomes {
+		for i, income := range incomes {
 			freqText := income.Frequency
 			if freqText == "monthly" {
 				freqText = "ежемесячно"
@@ -524,9 +540,9 @@ func (h *BotHandler) handleShowIncomes(message *tgbotapi.Message) {
 				dayDesc = weeks[income.RecurringDay]
 			}
 
-			text += fmt.Sprintf("%d\n💰 %s: %d₽ (%s, %s)\n\n", income.ID, income.Name, income.Amount, freqText, dayDesc)
+			text += fmt.Sprintf("%d\n💰 %s: %d₽ (%s, %s)\n\n", i+1, income.Name, income.Amount, freqText, dayDesc)
 
-			button := tgbotapi.NewInlineKeyboardButtonData(fmt.Sprintf("🗑️ Удалить %d", income.ID), fmt.Sprintf("delete_income_%d", income.ID))
+			button := tgbotapi.NewInlineKeyboardButtonData(fmt.Sprintf("🗑️ Удалить %d", i+1), fmt.Sprintf("delete_income_%d", income.ID))
 			inlineButtons = append(inlineButtons, []tgbotapi.InlineKeyboardButton{button})
 		}
 
@@ -1251,7 +1267,7 @@ func (h *BotHandler) showPaydayMenu(userID int64, chatID int64, incomeID int64, 
 
 	text := fmt.Sprintf(
 		"💰 Сегодня: %s\n\n"+
-			"🎯 День получки: %s\n"+
+			"🎯 День дохода: %s\n"+
 			"Сумма: %d₽\n\n"+
 			"Нужно отложить в этом месяце:\n"+
 			"%d/%d₽\n\n",
@@ -1530,7 +1546,7 @@ func (h *BotHandler) handlePaydayAmountInput(message *tgbotapi.Message) {
 	incomes, err := h.financeService.GetUserIncomes(ctx, userID)
 	if err != nil {
 		log.Printf("Failed to get user incomes: %v", err)
-		h.sendMessage(chatID, "❌ Ошибка при возврате к меню получки")
+		h.sendMessage(chatID, "❌ Ошибка при возврате к меню дохода")
 		return
 	}
 
@@ -1545,7 +1561,7 @@ func (h *BotHandler) handlePaydayAmountInput(message *tgbotapi.Message) {
 	}
 
 	if incomeName == "" {
-		h.sendMessage(chatID, "❌ Не найден доход для меню получки")
+		h.sendMessage(chatID, "❌ Не найден доход для меню дохода")
 		return
 	}
 
