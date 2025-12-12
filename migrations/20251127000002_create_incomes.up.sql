@@ -4,7 +4,8 @@ CREATE TABLE IF NOT EXISTS incomes (
     user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
     amount BIGINT NOT NULL,
-    recurring_day INT NOT NULL CHECK (recurring_day BETWEEN 1 AND 31),
+    frequency VARCHAR(20) DEFAULT 'monthly',
+    recurring_day INT NOT NULL,
     next_pay_date TIMESTAMP NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP

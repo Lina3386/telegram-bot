@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"flag"
+	"github.com/Lina3386/telegram-bot/internal/services"
 	"log"
 	"os"
 	"os/signal"
@@ -16,7 +17,7 @@ import (
 var configPath string
 
 func init() {
-	flag.StringVar(&configPath, "config-path", ".env", "path to config file")
+	flag.StringVar(&configPath, "config-path", "../.env", "path to config file")
 }
 
 type App struct {
@@ -59,44 +60,48 @@ func (a *App) initDeps(ctx context.Context) error {
 			return err
 		}
 	}
-	log.Println("✅ All dependencies initialized")
+	log.Println("All dependencies initialized")
 	return nil
 }
 
 func (a *App) initConfig(context.Context) error {
 	err := config.Load(configPath)
 	if err != nil {
-		log.Printf("⚠️  Config file not found, using environment variables: %v", err)
+		log.Printf("Config file not found, using environment variables: %v", err)
 		// Не возвращаем ошибку, так как переменные могут быть в окружении
 	}
-	log.Println("✅ Config loaded")
+	log.Println("Config loaded")
 	return nil
 }
 
 func (a *App) initServiceProvider(context.Context) error {
 	a.serviceProvider = NewServiceProvider()
-	log.Println("✅ Service provider created")
+	log.Println("Service provider created")
 	return nil
 }
 
 func (a *App) initTelegramBot(ctx context.Context) error {
 	bot, err := a.serviceProvider.TelegramBot(ctx)
 	if err != nil {
-		log.Printf("❌ Failed to initialize bot: %v", err)
+		log.Printf("Failed to initialize bot: %v", err)
 		return err
 	}
 	a.bot = bot
-	log.Println("✅ Telegram bot initialized")
+	log.Println("Telegram bot initialized")
 	return nil
 }
 
 func (a *App) initScheduler(ctx context.Context) error {
-	// Запускаем scheduler в горутине, чтобы не блокировать инициализацию
-	scheduler := a.serviceProvider.Scheduler(ctx)
+	bot := a.bot
+	financeService := a.serviceProvider.FinanceService(ctx)
+	userRepository := a.serviceProvider.UserRepository(ctx)
+	monthlyContribRepository := a.serviceProvider.MonthlyContributionsRepository(ctx)
+
+	scheduler := services.NewScheduler(bot, financeService, userRepository, monthlyContribRepository)
 	go func() {
 		scheduler.Start(ctx)
 	}()
-	log.Println("✅ Scheduler started in background")
+	log.Println("Scheduler started in background")
 	return nil
 }
 
@@ -105,10 +110,10 @@ func (a *App) runTelegramBot() error {
 
 	_, err := a.bot.GetMe()
 	if err != nil {
-		log.Printf("❌ Failed to get bot info: %v", err)
+		log.Printf("Failed to get bot info: %v", err)
 		return err
 	}
-	log.Println("✅ Bot is accessible via Telegram API")
+	log.Println("Bot is accessible via Telegram API")
 
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
@@ -150,7 +155,7 @@ func (a *App) runTelegramBot() error {
 				}
 			}
 			if update.CallbackQuery != nil {
-				log.Printf("🔘 Callback from %d: %s", update.CallbackQuery.From.ID, update.CallbackQuery.Data)
+				log.Printf("Callback from %d: %s", update.CallbackQuery.From.ID, update.CallbackQuery.Data)
 				botHandler.HandleCallback(update.CallbackQuery)
 			}
 		}

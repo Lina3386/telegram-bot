@@ -8,11 +8,11 @@ import (
 )
 
 const (
-	pgUserEnvName     = "DB_USER"
-	pgPasswordEnvName = "DB_PASSWORD"
+	pgUserEnvName     = "DB_USER_TELEGRAM"
+	pgPasswordEnvName = "DB_PASSWORD_TELEGRAM"
 	pgHostEnvName     = "DB_HOST"
 	pgPortEnvName     = "DB_PORT"
-	pgNameEnvName     = "DB_NAME"
+	pgNameEnvName     = "DB_NAME_TELEGRAM"
 	pgSSLModeEnvName  = "DB_SSLMODE"
 )
 
@@ -49,5 +49,3 @@ func NewPGConfig() (config.PGConfig, error) {
 func (cfg *pgConfig) DSN() string {
 	return cfg.dsn
 }
-
-

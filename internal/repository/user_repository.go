@@ -46,7 +46,20 @@ func (r *UserRepository) GetUserByTelegramID(ctx context.Context, telegramID int
 	return user, nil
 }
 
-// Обновляет месячные расходы
+func (r *UserRepository) GetUserByID(ctx context.Context, userID int64) (*models.User, error) {
+	user := &models.User{}
+	err := r.db.QueryRowContext(ctx,
+		`SELECT id, telegram_id, username, auth_token, monthly_expense, created_at, updated_at FROM users WHERE id = $1`, userID,
+	).Scan(&user.ID, &user.TelegramID, &user.Username, &user.AuthToken,
+		&user.MonthlyExpense, &user.CreatedAt, &user.UpdatedAt)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user: %w", err)
+	}
+
+	return user, nil
+}
+
 func (r *UserRepository) UpdateMonthlyExpense(ctx context.Context, userID int64, expense int64) error {
 	_, err := r.db.ExecContext(
 		ctx, `UPDATE users

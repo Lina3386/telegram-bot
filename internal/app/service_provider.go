@@ -27,25 +27,22 @@ type ServiceProvider struct {
 
 	dbClient db.Client
 
-	// Repositories
-	userRepo    *repository.UserRepository
-	incomeRepo  *repository.IncomeRepository
-	expenseRepo *repository.ExpenseRepository
-	goalRepo    *repository.GoalRepository
+	userRepo                 *repository.UserRepository
+	incomeRepo               *repository.IncomeRepository
+	expenseRepo              *repository.ExpenseRepository
+	goalRepo                 *repository.GoalRepository
+	monthlyContributionsRepo *repository.MonthlyContributionsRepository
+	incomeProcessingLogRepo  *repository.IncomeProcessingLogRepository
 
-	// Services
 	financeService *services.FinanceService
 	authClient     *client.AuthClient
 	chatClient     *client.ChatClient
 	scheduler      *services.Scheduler
 
-	// Handlers
 	botHandler *handlers.BotHandler
 
-	// State
 	stateManager *state.StateManager
 
-	// Bot
 	bot *tgbotapi.BotAPI
 }
 
@@ -102,13 +99,13 @@ func (s *ServiceProvider) DBClient(ctx context.Context) db.Client {
 		log.Println("📦 Connecting to database...")
 		cl, err := pg.New(ctx, s.PGConfig().DSN())
 		if err != nil {
-			log.Fatalf("❌ failed to get db client: %v", err)
+			log.Fatalf("failed to get db client: %v", err)
 		}
 		err = cl.DB().PingContext(ctx)
 		if err != nil {
-			log.Fatalf("❌ ping error: %v", err)
+			log.Fatalf("ping error: %v", err)
 		}
-		log.Println("✅ Database connected")
+		log.Println("Database connected")
 
 		closer.Add(func() error {
 			return cl.Close()
@@ -150,6 +147,20 @@ func (s *ServiceProvider) GoalRepository(ctx context.Context) *repository.GoalRe
 	return s.goalRepo
 }
 
+func (s *ServiceProvider) MonthlyContributionsRepository(ctx context.Context) *repository.MonthlyContributionsRepository {
+	if s.monthlyContributionsRepo == nil {
+		s.monthlyContributionsRepo = repository.NewMonthlyContributionsRepository(s.SQLDB(ctx))
+	}
+	return s.monthlyContributionsRepo
+}
+
+func (s *ServiceProvider) IncomeProcessingLogRepository(ctx context.Context) *repository.IncomeProcessingLogRepository {
+	if s.incomeProcessingLogRepo == nil {
+		s.incomeProcessingLogRepo = repository.NewIncomeProcessingLogRepository(s.SQLDB(ctx))
+	}
+	return s.incomeProcessingLogRepo
+}
+
 func (s *ServiceProvider) FinanceService(ctx context.Context) *services.FinanceService {
 	if s.financeService == nil {
 		s.financeService = services.NewFinanceService(
@@ -157,6 +168,8 @@ func (s *ServiceProvider) FinanceService(ctx context.Context) *services.FinanceS
 			s.IncomeRepository(ctx),
 			s.ExpenseRepository(ctx),
 			s.GoalRepository(ctx),
+			s.MonthlyContributionsRepository(ctx),
+			s.IncomeProcessingLogRepository(ctx),
 		)
 	}
 	return s.financeService
@@ -213,12 +226,15 @@ func (s *ServiceProvider) TelegramBot(ctx context.Context) (*tgbotapi.BotAPI, er
 
 func (s *ServiceProvider) Scheduler(ctx context.Context) *services.Scheduler {
 	bot, _ := s.TelegramBot(ctx)
-	return services.NewScheduler(bot, s.FinanceService(ctx))
+	financeService := s.FinanceService(ctx)
+	userRepository := s.UserRepository(ctx)
+	monthlyContribRepository := s.MonthlyContributionsRepository(ctx)
+
+	return services.NewScheduler(bot, financeService, userRepository, monthlyContribRepository)
 }
 
 func (s *ServiceProvider) BotHandler(ctx context.Context) *handlers.BotHandler {
 	if s.botHandler == nil {
-		// ✅ Убеждаемся, что бот инициализирован
 		bot, err := s.TelegramBot(ctx)
 		if err != nil {
 			log.Printf("⚠️  Warning: bot not initialized, handler may not work: %v", err)
