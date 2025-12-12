@@ -15,15 +15,10 @@ func NewUserRepository(db *sql.DB) *UserRepository {
 	return &UserRepository{db: db}
 }
 
-func (r *UserRepository) CreateUser(ctx context.Context, telegramID int64, username string, authToken string) (*models.User, error) {
-	user := &models.User{
-		TelegramID: telegramID,
-		Username:   username,
-		AuthToken:  authToken,
-	}
-
-	err := r.db.QueryRowContext(ctx, `INSERT INTO users (telegram_id, username, auth_token) VALUES ($1, $2, $3) RETURNING id, created_at, updated_at`,
-		telegramID, username, authToken).Scan(&user.ID, &user.CreatedAt, &user.UpdatedAt)
+func (r *UserRepository) CreateUser(ctx context.Context, user *models.User) (*models.User, error) {
+	err := r.db.QueryRowContext(ctx,
+		`INSERT INTO users (telegram_id, username, auth_token) VALUES ($1, $2, $3) RETURNING id, created_at, updated_at`,
+		user.TelegramID, user.Username, user.AuthToken).Scan(&user.ID, &user.CreatedAt, &user.UpdatedAt)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to create user: %w", err)

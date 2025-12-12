@@ -8,11 +8,11 @@ import (
 )
 
 const (
-	pgUserEnvName     = "DB_USER_TELEGRAM"
-	pgPasswordEnvName = "DB_PASSWORD_TELEGRAM"
+	pgUserEnvName     = "DB_USER"
+	pgPasswordEnvName = "DB_PASSWORD"
 	pgHostEnvName     = "DB_HOST"
 	pgPortEnvName     = "DB_PORT"
-	pgNameEnvName     = "DB_NAME_TELEGRAM"
+	pgNameEnvName     = "DB_NAME"
 	pgSSLModeEnvName  = "DB_SSLMODE"
 )
 

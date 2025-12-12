@@ -324,7 +324,7 @@ func (s *Scheduler) calculateNextPayDate(frequency string, recurringDay int) tim
 		daysUntil := (recurringDay - int(now.Weekday()) + 7) % 7
 		if daysUntil <= 0 {
 			daysUntil = 7
-
+		}
 		next := now.AddDate(0, 0, daysUntil)
 		return time.Date(next.Year(), next.Month(), next.Day(), 9, 0, 0, 0, next.Location())
 

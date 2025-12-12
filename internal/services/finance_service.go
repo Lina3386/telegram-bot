@@ -275,7 +275,14 @@ func (s *FinanceService) DistributeFundsToGoals(ctx context.Context, telegramID 
 }
 
 func (s *FinanceService) CreateUser(ctx context.Context, telegramID int64, username string, authToken string) (*models.User, error) {
-	user, err := s.userRepo.CreateUser(ctx, telegramID, username, authToken)
+	user := &models.User{
+		TelegramID: telegramID,
+		Username:   username,
+		AuthToken:  authToken,
+		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
+	}
+	user, err := s.userRepo.CreateUser(ctx, user)
 	if err != nil {
 		log.Printf("Failed to create user: %v", err)
 		return nil, err
@@ -903,7 +910,6 @@ func (s *FinanceService) IsIncomeProcessedOnDate(ctx context.Context, incomeID i
 }
 
 func (s *FinanceService) CompletePaydaySession(ctx context.Context, incomeID int64) error {
-	// По завершению сессии payday обновляем next_pay_date для следующего платежа
 	income, err := s.incomeRepo.GetIncomeByID(ctx, incomeID)
 	if err != nil {
 		return fmt.Errorf("failed to get income: %w", err)

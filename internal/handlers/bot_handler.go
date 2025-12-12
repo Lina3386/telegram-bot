@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Lina3386/telegram-bot/internal/client"
 	"github.com/Lina3386/telegram-bot/internal/services"
 	"github.com/Lina3386/telegram-bot/internal/state"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -32,23 +31,20 @@ const helpText = `📖 Справка по командам:
 type BotHandler struct {
 	bot            *tgbotapi.BotAPI
 	financeService *services.FinanceService
-	authClient     *client.AuthClient
-	chatClient     *client.ChatClient
+	authService    *services.AuthService
 	stateManager   *state.StateManager
 }
 
 func NewBotHandler(
 	bot *tgbotapi.BotAPI,
 	financeService *services.FinanceService,
-	authClient *client.AuthClient,
-	chatClient *client.ChatClient,
+	authService *services.AuthService,
 	stateManager *state.StateManager,
 ) *BotHandler {
 	return &BotHandler{
 		bot:            bot,
 		financeService: financeService,
-		authClient:     authClient,
-		chatClient:     chatClient,
+		authService:    authService,
 		stateManager:   stateManager,
 	}
 }
@@ -79,14 +75,14 @@ func (h *BotHandler) HandleStart(message *tgbotapi.Message) {
 		return
 	}
 
-	token, err := h.authClient.RegisterTelegramUser(ctx, userID, username)
+	token, err := h.authService.RegisterTelegramUser(ctx, userID, username)
 	if err != nil {
 		log.Printf("Failed to register user: %v", err)
 		h.sendMessage(chatID, "Ошибка регистрации. Попробуйте позже.")
 		return
 	}
 
-	_ = h.chatClient.LogFinancialOperation(ctx, userID, "USER_REGISTERED", fmt.Sprintf("User %s registered", username))
+	fmt.Sprintf("User %s registered", username)
 
 	_, err = h.financeService.CreateUser(ctx, userID, username, token)
 	if err != nil {
@@ -292,7 +288,7 @@ func (h *BotHandler) HandleTextMessage(message *tgbotapi.Message) {
 			return
 		}
 
-		_ = h.chatClient.LogFinancialOperation(ctx, userID, "INCOME_ADDED", fmt.Sprintf("%s: %d₽ (%s day %d, notify at %d:00)", incomeName, incomeAmount, frequency, recurringDay, notificationHour))
+		fmt.Sprintf("%s: %d₽ (%s day %d, notify at %d:00)", incomeName, incomeAmount, frequency, recurringDay, notificationHour)
 
 		h.stateManager.ClearState(userID)
 
@@ -335,7 +331,7 @@ func (h *BotHandler) HandleTextMessage(message *tgbotapi.Message) {
 			return
 		}
 
-		_ = h.chatClient.LogFinancialOperation(ctx, userID, "EXPENSE_ADDED", fmt.Sprintf("%s: %d₽", expenseName, amount))
+		fmt.Sprintf("%s: %d₽", expenseName, amount)
 
 		h.stateManager.ClearState(userID)
 		h.sendMessageWithKeyboard(
@@ -391,7 +387,7 @@ func (h *BotHandler) HandleTextMessage(message *tgbotapi.Message) {
 			priorityText = fmt.Sprintf("Приоритет %d", newPriority)
 		}
 
-		h.chatClient.LogFinancialOperation(ctx, userID, "GOAL_CREATED", fmt.Sprintf("%s (цель: %d, приоритет: %s)", goalName, targetAmount, priorityText))
+		fmt.Sprintf("%s (цель: %d, приоритет: %s)", goalName, targetAmount, priorityText)
 
 		timeToGoal := h.calculateTimeToGoal(targetAmount, goal.MonthlyContrib, 0)
 		h.stateManager.ClearState(userID)
@@ -421,7 +417,7 @@ func (h *BotHandler) HandleTextMessage(message *tgbotapi.Message) {
 			return
 		}
 
-		_ = h.chatClient.LogFinancialOperation(ctx, userID, "GOAL_WITHDRAWAL", fmt.Sprintf("%s: -%d₽ (remaining: %d₽)", goal.GoalName, amount, goal.CurrentAmount))
+		fmt.Sprintf("%s: -%d₽ (remaining: %d₽)", goal.GoalName, amount, goal.CurrentAmount)
 
 		progress := int64(0)
 		if goal.TargetAmount > 0 {
@@ -466,8 +462,7 @@ func (h *BotHandler) HandleTextMessage(message *tgbotapi.Message) {
 			statusText = "🎉 Цель достигнута!"
 		}
 
-		_ = h.chatClient.LogFinancialOperation(ctx, userID, "GOAL_CONTRIBUTION",
-			fmt.Sprintf("%s: +%d₽ (total: %d₽)", goal.GoalName, amount, goal.CurrentAmount))
+		fmt.Sprintf("%s: +%d₽ (total: %d₽)", goal.GoalName, amount, goal.CurrentAmount)
 
 		h.stateManager.ClearState(userID)
 
@@ -947,7 +942,7 @@ func (h *BotHandler) HandleCallback(query *tgbotapi.CallbackQuery) {
 				h.answerCallback(query.ID, "❌ Ошибка при удалении")
 				return
 			}
-			_ = h.chatClient.LogFinancialOperation(ctx, userID, "INCOME_DELETED", fmt.Sprintf("income_id: %d", incomeID))
+			fmt.Sprintf("income_id: %d", incomeID)
 			h.answerCallback(query.ID, "✅ Доход удален")
 			h.handleShowIncomes(&tgbotapi.Message{From: &tgbotapi.User{ID: userID}, Chat: &tgbotapi.Chat{ID: chatID}})
 
@@ -963,7 +958,7 @@ func (h *BotHandler) HandleCallback(query *tgbotapi.CallbackQuery) {
 				h.answerCallback(query.ID, "❌ Ошибка при удалении")
 				return
 			}
-			_ = h.chatClient.LogFinancialOperation(ctx, userID, "EXPENSE_DELETED", fmt.Sprintf("expense_id: %d", expenseID))
+			fmt.Sprintf("expense_id: %d", expenseID)
 			h.answerCallback(query.ID, "✅ Расход удален")
 			h.handleShowExpenses(&tgbotapi.Message{From: &tgbotapi.User{ID: userID}, Chat: &tgbotapi.Chat{ID: chatID}})
 
@@ -979,7 +974,7 @@ func (h *BotHandler) HandleCallback(query *tgbotapi.CallbackQuery) {
 				h.answerCallback(query.ID, "❌ Ошибка при удалении")
 				return
 			}
-			_ = h.chatClient.LogFinancialOperation(ctx, userID, "GOAL_DELETED", fmt.Sprintf("goal_id: %d", goalID))
+			fmt.Sprintf("goal_id: %d", goalID)
 			h.answerCallback(query.ID, "✅ Цель удалена")
 			h.handleShowGoals(&tgbotapi.Message{From: &tgbotapi.User{ID: userID}, Chat: &tgbotapi.Chat{ID: chatID}})
 		}
@@ -1530,8 +1525,7 @@ func (h *BotHandler) handlePaydayAmountInput(message *tgbotapi.Message) {
 		log.Printf("Failed to save monthly contribution: %v", err)
 	}
 
-	_ = h.chatClient.LogFinancialOperation(ctx, userID, "PAYDAY_CONTRIBUTION",
-		fmt.Sprintf("%s: +%d₽ (total: %d₽)", goal.GoalName, amount, goal.CurrentAmount))
+	fmt.Sprintf("%s: +%d₽ (total: %d₽)", goal.GoalName, amount, goal.CurrentAmount)
 
 	incomes, err := h.financeService.GetUserIncomes(ctx, userID)
 	if err != nil {

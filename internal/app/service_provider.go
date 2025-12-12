@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"log"
 
-	"github.com/Lina3386/telegram-bot/internal/client"
 	"github.com/Lina3386/telegram-bot/internal/client/db"
 	"github.com/Lina3386/telegram-bot/internal/client/db/pg"
 	"github.com/Lina3386/telegram-bot/internal/closer"
@@ -35,8 +34,7 @@ type ServiceProvider struct {
 	incomeProcessingLogRepo  *repository.IncomeProcessingLogRepository
 
 	financeService *services.FinanceService
-	authClient     *client.AuthClient
-	chatClient     *client.ChatClient
+	authService    *services.AuthService
 	scheduler      *services.Scheduler
 
 	botHandler *handlers.BotHandler
@@ -96,7 +94,7 @@ func (s *ServiceProvider) ChatConfig() config.ChatConfig {
 
 func (s *ServiceProvider) DBClient(ctx context.Context) db.Client {
 	if s.dbClient == nil {
-		log.Println("📦 Connecting to database...")
+		log.Println("Connecting to database...")
 		cl, err := pg.New(ctx, s.PGConfig().DSN())
 		if err != nil {
 			log.Fatalf("failed to get db client: %v", err)
@@ -175,28 +173,12 @@ func (s *ServiceProvider) FinanceService(ctx context.Context) *services.FinanceS
 	return s.financeService
 }
 
-func (s *ServiceProvider) AuthClient(ctx context.Context) *client.AuthClient {
-	if s.authClient == nil {
-		authClient, err := client.NewAuthClient(s.AuthConfig().Address())
-		if err != nil {
-			log.Printf("Failed to connect to auth service: %v (will use mock)", err)
-		}
-		s.authClient = authClient
-		closer.Add(s.authClient.Close)
+func (s *ServiceProvider) AuthService(ctx context.Context) *services.AuthService {
+	if s.authService == nil {
+		authClient := services.NewAuthService(s.UserRepository(ctx))
+		s.authService = authClient
 	}
-	return s.authClient
-}
-
-func (s *ServiceProvider) ChatClient(ctx context.Context) *client.ChatClient {
-	if s.chatClient == nil {
-		chatClient, err := client.NewChatClient(s.ChatConfig().Address())
-		if err != nil {
-			log.Printf("Failed to connect to chat service: %v (will use mock)", err)
-		}
-		s.chatClient = chatClient
-		closer.Add(s.chatClient.Close)
-	}
-	return s.chatClient
+	return s.authService
 }
 
 func (s *ServiceProvider) StateManager() *state.StateManager {
@@ -237,16 +219,15 @@ func (s *ServiceProvider) BotHandler(ctx context.Context) *handlers.BotHandler {
 	if s.botHandler == nil {
 		bot, err := s.TelegramBot(ctx)
 		if err != nil {
-			log.Printf("⚠️  Warning: bot not initialized, handler may not work: %v", err)
+			log.Printf("Warning: bot not initialized, handler may not work: %v", err)
 		}
 		s.botHandler = handlers.NewBotHandler(
 			bot,
 			s.FinanceService(ctx),
-			s.AuthClient(ctx),
-			s.ChatClient(ctx),
+			s.AuthService(ctx),
 			s.StateManager(),
 		)
-		log.Println("✅ Bot handler created")
+		log.Println("Bot handler created")
 	}
 	return s.botHandler
 }
