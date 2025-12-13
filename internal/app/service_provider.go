@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"database/sql"
+	"github.com/Lina3386/telegram-bot/internal/handlers/bot_handler"
 	"log"
 
 	"github.com/Lina3386/telegram-bot/internal/client/db"
@@ -10,7 +11,6 @@ import (
 	"github.com/Lina3386/telegram-bot/internal/closer"
 	"github.com/Lina3386/telegram-bot/internal/config"
 	"github.com/Lina3386/telegram-bot/internal/config/env"
-	"github.com/Lina3386/telegram-bot/internal/handlers"
 	"github.com/Lina3386/telegram-bot/internal/repository"
 	"github.com/Lina3386/telegram-bot/internal/services"
 	"github.com/Lina3386/telegram-bot/internal/state"
@@ -37,7 +37,7 @@ type ServiceProvider struct {
 	authService    *services.AuthService
 	scheduler      *services.Scheduler
 
-	botHandler *handlers.BotHandler
+	botHandler *bot_handler.BotHandler
 
 	stateManager *state.StateManager
 
@@ -215,13 +215,13 @@ func (s *ServiceProvider) Scheduler(ctx context.Context) *services.Scheduler {
 	return services.NewScheduler(bot, financeService, userRepository, monthlyContribRepository)
 }
 
-func (s *ServiceProvider) BotHandler(ctx context.Context) *handlers.BotHandler {
+func (s *ServiceProvider) BotHandler(ctx context.Context) *bot_handler.BotHandler {
 	if s.botHandler == nil {
 		bot, err := s.TelegramBot(ctx)
 		if err != nil {
 			log.Printf("Warning: bot not initialized, handler may not work: %v", err)
 		}
-		s.botHandler = handlers.NewBotHandler(
+		s.botHandler = bot_handler.NewBotHandler(
 			bot,
 			s.FinanceService(ctx),
 			s.AuthService(ctx),
